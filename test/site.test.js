@@ -47,6 +47,20 @@ test('the scroll cue is readable rather than a clipped vertical string', () => {
   assert.match(cue, /color: var\(--plum\)/);
 });
 
+test('Chrome uses guided smooth scrolling instead of hard CSS snapping', () => {
+  const html = read('index.html');
+  const css = read('styles.css');
+  const script = read('script.js');
+  const brand = html.match(/<a class="brand"[\s\S]*?<\/a>/)?.[0] || '';
+
+  assert.match(brand, /class="brand__mark"[^>]*>KRM</);
+  assert.doesNotMatch(brand, /<img/);
+  assert.match(css, /scroll-behavior:\s*smooth/);
+  assert.doesNotMatch(css, /scroll-snap-type|scroll-snap-stop/);
+  assert.match(script, /function setupGuidedStoryScroll\(\)/);
+  assert.match(script, /behavior:\s*"smooth"/);
+});
+
 test('the illustrative channel figures stay internally consistent', async () => {
   const { CHANNELS, STORY_STATES } = await import('../script.js');
   const total = (key) => CHANNELS.reduce((sum, channel) => sum + channel[key], 0);

@@ -26,13 +26,8 @@
 }
 
 html {
-  /* One scroll moves one section. Every block down the page carries a snap
-     position, because a mandatory snap with gaps in it traps the scroll: with
-     nothing to move to, it drags the page back where it came from.
-     scroll-behavior is deliberately not smooth here — a smooth-scroll
-     animation and the snap engine retarget each other and the result stutters.
-     Snapping animates on its own. */
-  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--header-height) + 24px);
   background: var(--paper);
 }
 
@@ -112,23 +107,9 @@ button {
   margin-inline: auto;
 }
 
-/* The header offset for anchor links lives on the targets rather than as
-   scroll-padding on the root. Root padding shrinks the snapport, and a snap
-   area taller than the snapport is one Chrome refuses to snap to at all. */
 .section,
 .story {
   scroll-margin-top: calc(var(--header-height) + 24px);
-}
-
-.hero,
-.section {
-  scroll-snap-align: start;
-}
-
-/* Aligning the footer to the end puts its snap position at the very bottom of
-   the document, so the last stretch of the page stays reachable. */
-.site-footer {
-  scroll-snap-align: end;
 }
 
 .section {
@@ -232,25 +213,27 @@ button {
 }
 
 .brand {
-  display: inline-flex;
+  display: grid;
   min-width: 122px;
-  align-items: center;
+  justify-items: start;
   color: inherit;
+  line-height: 1;
   text-decoration: none;
 }
 
-.brand img {
-  width: 106px;
-  height: auto;
-  max-height: 58px;
-  object-fit: contain;
-  filter: drop-shadow(0 1px 12px rgba(0, 0, 0, 0.24));
-  transition: filter 260ms ease, opacity 260ms ease;
+.brand__mark {
+  font-family: var(--display);
+  font-size: 2.45rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
 }
 
-.site-header:not([data-scrolled]) .brand img {
-  opacity: 0.9;
-  filter: brightness(0) saturate(100%) drop-shadow(0 1px 10px rgba(75, 38, 62, 0.12));
+.brand__name {
+  margin: 3px 0 0 2px;
+  font-size: 0.48rem;
+  font-weight: 800;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
 }
 
 .site-nav {
@@ -720,10 +703,6 @@ button {
   flex-direction: column;
   justify-content: center;
   padding: 14svh 0;
-  /* One scroll gesture advances exactly one chapter, and always comes to rest
-     with that chapter centred against its panel. */
-  scroll-snap-align: center;
-  scroll-snap-stop: always;
   opacity: 0.72;
   transition:
     opacity 500ms ease,
@@ -1522,8 +1501,8 @@ button {
     font-size: 0.82rem;
   }
 
-  .brand img {
-    width: 124px;
+  .brand__mark {
+    font-size: 2.7rem;
   }
 
   .hero h1 {
@@ -1764,13 +1743,6 @@ button {
     opacity: 1;
   }
 
-  /* Chapters are only a full screen tall on the wide layout. Here they are
-     short blocks beneath a pinned panel, so several sit inside the viewport at
-     once and snapping would fight the scroll rather than guide it. */
-  html {
-    scroll-snap-type: none;
-  }
-
   .story-step:first-child {
     padding-top: 52px;
   }
@@ -1922,8 +1894,6 @@ button {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
-    /* Snapping without a smooth scroll is an abrupt jump, so drop it here. */
-    scroll-snap-type: none;
   }
 
   *,

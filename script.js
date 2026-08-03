@@ -1084,6 +1084,59 @@ function setupDemoForm() {
   });
 }
 
+function setupGuidedStoryScroll() {
+  const hero = $(".hero");
+  const story = $(".story");
+  const steps = $$(".story-step[data-chapter]");
+  const afterStory = story?.nextElementSibling;
+  const wide = window.matchMedia("(min-width: 821px)");
+  if (!hero || !story || !steps.length || !afterStory || reducedMotion()) return;
+
+  let lockedUntil = 0;
+
+  const topOf = (element) => {
+    const rect = element.getBoundingClientRect();
+    if (element.matches(".story-step")) {
+      return window.scrollY + rect.top - (window.innerHeight - rect.height) / 2;
+    }
+    const margin = parseFloat(getComputedStyle(element).scrollMarginTop) || 0;
+    return window.scrollY + rect.top - margin;
+  };
+
+  window.addEventListener(
+    "wheel",
+    (event) => {
+      if (
+        !wide.matches ||
+        event.ctrlKey ||
+        Math.abs(event.deltaY) < 4 ||
+        Math.abs(event.deltaY) <= Math.abs(event.deltaX)
+      ) return;
+
+      const stops = [topOf(hero), ...steps.map(topOf), topOf(afterStory)];
+      const y = window.scrollY;
+      const tolerance = Math.max(24, window.innerHeight * 0.03);
+      if (y < stops[0] - tolerance || y > stops[stops.length - 1] + tolerance) return;
+
+      const next = event.deltaY > 0
+        ? stops.find((stop) => stop > y + tolerance)
+        : [...stops].reverse().find((stop) => stop < y - tolerance);
+      if (next === undefined) return;
+
+      event.preventDefault();
+      const now = performance.now();
+      if (now < lockedUntil) {
+        lockedUntil = Math.max(lockedUntil, now + 140);
+        return;
+      }
+
+      lockedUntil = now + 650;
+      window.scrollTo({ top: Math.max(0, next), behavior: "smooth" });
+    },
+    { passive: false },
+  );
+}
+
 function setupHeader() {
   const header = $(".site-header");
   if (!header) return;
@@ -1097,6 +1150,7 @@ if (typeof document !== "undefined") {
   setupHeader();
   setupHeroArt();
   setupScrollStory();
+  setupGuidedStoryScroll();
   setupReveals();
   setupTestimonials();
   setupDemoForm();
