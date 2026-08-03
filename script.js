@@ -1091,9 +1091,9 @@ function setupDemoForm() {
  * means enabling it can never yank the page.
  */
 function setupChapterSnap() {
-  const steps = $$(".story-step[data-chapter]");
-  const last = steps[steps.length - 1];
-  if (!last || reducedMotion()) return;
+  const story = $(".story");
+  const after = story?.nextElementSibling;
+  if (!story || !after || reducedMotion()) return;
 
   const root = document.documentElement;
   // Chapters are a full viewport tall only on the wide layout. On a phone they
@@ -1101,13 +1101,13 @@ function setupChapterSnap() {
   // snapport at once and snapping fights the scroll instead of guiding it.
   const wide = window.matchMedia("(min-width: 821px)");
 
-  let release = 0;
+  let release = Infinity;
   let queued = false;
 
   const apply = () => {
     root.toggleAttribute(
       "data-chapter-snap",
-      wide.matches && window.scrollY <= release,
+      wide.matches && window.scrollY < release,
     );
   };
 
@@ -1115,11 +1115,12 @@ function setupChapterSnap() {
   // has to wait for a synchronous layout.
   const measure = () => {
     queued = false;
-    const box = last.getBoundingClientRect();
-    // Snapping is released as soon as the final chapter has been reached.
-    // Leaving it on past the last snap position drags the sections below back
-    // up into the story, which reads as the page refusing to scroll.
-    release = window.scrollY + box.top + box.height / 2 - window.innerHeight / 2 + 8;
+    // Release exactly where the section after the story snaps to. Toggling on
+    // any other position races the snap engine, which has already chosen its
+    // target: it wins, and the page sticks on the last chapter. Flipping the
+    // switch on a snap position means neither answer moves the page.
+    const offset = parseFloat(getComputedStyle(after).scrollMarginTop) || 0;
+    release = window.scrollY + after.getBoundingClientRect().top - offset - 2;
     apply();
   };
 
@@ -1133,7 +1134,7 @@ function setupChapterSnap() {
   window.addEventListener("scroll", apply, { passive: true });
   window.addEventListener("resize", remeasure, { passive: true });
   wide.addEventListener?.("change", remeasure);
-  if ("ResizeObserver" in window) new ResizeObserver(remeasure).observe(last);
+  if ("ResizeObserver" in window) new ResizeObserver(remeasure).observe(story);
 }
 
 function setupHeader() {

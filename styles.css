@@ -125,6 +125,14 @@ button {
   scroll-margin-top: calc(var(--header-height) + 24px);
 }
 
+/* The last chapter needs somewhere to go. Without a snap position below it, a
+   mandatory snap has nothing to move to and drags the page back into the
+   story. This section is far taller than the viewport, so once it is reached
+   the snap becomes a range and scrolling is free again. */
+.story + .section {
+  scroll-snap-align: start;
+}
+
 .section {
   position: relative;
   padding: clamp(88px, 12vw, 168px) 0;
