@@ -382,7 +382,7 @@ button {
   position: absolute;
   z-index: 1;
   inset: 0;
-  background: linear-gradient(90deg, rgba(255, 250, 246, 0.78) 0 36%, rgba(255, 250, 246, 0.66) 48%, transparent 72%);
+  background: linear-gradient(90deg, rgba(255, 250, 246, 0.62) 0 30%, rgba(255, 250, 246, 0.5) 46%, rgba(255, 250, 246, 0.12) 66%, transparent 76%);
   content: "";
   pointer-events: none;
 }

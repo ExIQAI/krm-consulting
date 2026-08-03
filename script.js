@@ -75,6 +75,8 @@ const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)]
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const lerp = (from, to, t) => from + (to - from) * t;
 const smooth = (t) => t * t * (3 - 2 * t);
+export const pulseEnvelope = (position) =>
+  Math.sin(Math.PI * clamp(position, 0, 1)) ** 1.35;
 
 const reducedMotion = () =>
   typeof window.matchMedia === "function" &&
@@ -309,12 +311,12 @@ function setupHeroArt() {
         else ctx.moveTo(point.x, point.y);
       }
       const ink = ctx.createLinearGradient(-width * 0.06, 0, cx, 0);
-      ink.addColorStop(0, "rgba(75, 38, 62, 0.02)");
-      ink.addColorStop(0.5, "rgba(75, 38, 62, 0.28)");
-      ink.addColorStop(0.9, "rgba(160, 46, 108, 0.6)");
-      ink.addColorStop(1, "rgba(201, 37, 123, 0.85)");
+      ink.addColorStop(0, "rgba(75, 38, 62, 0.16)");
+      ink.addColorStop(0.45, "rgba(75, 38, 62, 0.48)");
+      ink.addColorStop(0.82, "rgba(160, 46, 108, 0.76)");
+      ink.addColorStop(1, "rgba(201, 37, 123, 0.96)");
       ctx.strokeStyle = ink;
-      ctx.lineWidth = strand.weight;
+      ctx.lineWidth = strand.weight * 1.16;
       ctx.stroke();
 
       // Data running down each strand towards the merge point.
@@ -353,37 +355,53 @@ function setupHeroArt() {
     const signal = ctx.createLinearGradient(geo.cx, geo.cy, geo.ex, geo.ey);
     signal.addColorStop(0, "#c9257b");
     signal.addColorStop(0.55, "#f3b9d8");
-    signal.addColorStop(1, "#fff7fb");
+    signal.addColorStop(1, "#f8dbea");
 
-    ctx.strokeStyle = "rgba(242, 198, 222, 0.22)";
-    ctx.lineWidth = 12;
+    ctx.strokeStyle = "rgba(201, 37, 123, 0.16)";
+    ctx.lineWidth = 9;
     ctx.stroke();
     ctx.strokeStyle = signal;
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = 2.2;
     ctx.stroke();
 
-    // A pulse travelling out along the signal.
-    const travel = (time * 0.19) % 1;
+    // A tapered colour wave travelling out along the signal. Drawing short
+    // graduated segments avoids the solid white bar produced by one glowing
+    // stroke, while the envelope fades both ends into the base signal.
+    const pulseLength = 0.28;
+    const travel = (time * 0.16) % 1;
+    const tail = travel - pulseLength;
     ctx.save();
-    ctx.beginPath();
-    const tail = Math.max(0, travel - 0.13);
-    for (let i = 0; i <= 18; i += 1) {
-      const point = spineAt(lerp(tail, travel, i / 18), geo);
-      if (i) ctx.lineTo(point.x, point.y);
-      else ctx.moveTo(point.x, point.y);
+    ctx.lineCap = "butt";
+    for (let i = 0; i < 36; i += 1) {
+      const fromT = lerp(tail, travel, i / 36);
+      const toT = lerp(tail, travel, (i + 1) / 36);
+      if (toT <= 0 || fromT >= 1) continue;
+
+      const position = (i + 0.5) / 36;
+      const strength = pulseEnvelope(position);
+      const colour = smooth(position);
+      const red = Math.round(lerp(201, 248, colour));
+      const green = Math.round(lerp(37, 219, colour));
+      const blue = Math.round(lerp(123, 234, colour));
+      const from = spineAt(clamp(fromT, 0, 1), geo);
+      const to = spineAt(clamp(toT, 0, 1), geo);
+
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.strokeStyle = `rgba(${red}, ${green}, ${blue}, ${(strength * 0.88).toFixed(3)})`;
+      ctx.lineWidth = 1.8 + strength * 2.2;
+      ctx.shadowColor = `rgba(201, 37, 123, ${(strength * 0.48).toFixed(3)})`;
+      ctx.shadowBlur = 4 + strength * 10;
+      ctx.stroke();
     }
-    ctx.strokeStyle = "rgba(255, 250, 246, 0.92)";
-    ctx.lineWidth = 3.4;
-    ctx.shadowColor = "#f2c6de";
-    ctx.shadowBlur = 16;
-    ctx.stroke();
     ctx.restore();
 
     // The merge point itself.
     const halo = 26 + Math.sin(time * 1.6) * 5;
     const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, halo);
-    glow.addColorStop(0, "rgba(255, 247, 251, 0.85)");
-    glow.addColorStop(0.35, "rgba(201, 37, 123, 0.32)");
+    glow.addColorStop(0, "rgba(248, 219, 234, 0.76)");
+    glow.addColorStop(0.35, "rgba(201, 37, 123, 0.4)");
     glow.addColorStop(1, "rgba(201, 37, 123, 0)");
     ctx.beginPath();
     ctx.arc(cx, cy, halo, 0, Math.PI * 2);
@@ -392,7 +410,7 @@ function setupHeroArt() {
 
     ctx.beginPath();
     ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-    ctx.fillStyle = "#fff7fb";
+    ctx.fillStyle = "#f8dbea";
     ctx.fill();
   });
 }

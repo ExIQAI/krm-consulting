@@ -37,6 +37,14 @@ test('the hero and story artwork are canvas driven, with the old vectors gone', 
   assert.equal((html.match(/team-card__tag/g) || []).length, 2);
 });
 
+test('the hero signal pulse fades smoothly at both ends', async () => {
+  const { pulseEnvelope } = await import('../script.js');
+
+  assert.equal(pulseEnvelope(0), 0);
+  assert.ok(pulseEnvelope(0.5) > 0.99);
+  assert.ok(pulseEnvelope(1) < 0.000001);
+});
+
 test('the scroll cue is readable rather than a clipped vertical string', () => {
   const html = read('index.html');
   const css = read('styles.css');
