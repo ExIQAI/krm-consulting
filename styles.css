@@ -28,6 +28,10 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: calc(var(--header-height) + 24px);
+  /* Proximity rather than mandatory: the story chapters click into place so a
+     scroll never rests halfway between two of them, while the tall sections
+     below stay freely scrollable. */
+  scroll-snap-type: y proximity;
   background: var(--paper);
 }
 
@@ -110,6 +114,7 @@ button {
 .section {
   position: relative;
   padding: clamp(88px, 12vw, 168px) 0;
+  scroll-snap-align: start;
 }
 
 .section--dark {
@@ -392,97 +397,11 @@ button {
   pointer-events: none;
 }
 
-.hero-art__svg {
+.hero-art__canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-}
-
-.hero-art__blush {
-  fill: url("#hero-blush");
-}
-
-.hero-art__ribbon {
-  fill: url("#hero-ink");
-  filter: drop-shadow(-34px 20px 54px rgba(75, 38, 62, 0.18));
-}
-
-.hero-art__noise {
-  animation: hero-noise-drift 9s ease-in-out infinite alternate;
-}
-
-.hero-art__noise-line {
-  fill: none;
-  stroke: rgba(75, 38, 62, 0.58);
-  stroke-width: 1.4;
-  vector-effect: non-scaling-stroke;
-}
-
-.hero-art__noise-line--soft {
-  stroke: rgba(201, 37, 123, 0.34);
-  stroke-dasharray: 3 3;
-}
-
-.hero-art__noise-dot,
-.hero-art__convergence {
-  fill: var(--plum);
-}
-
-.hero-art__noise-dot {
-  animation: hero-dot-pulse 4.2s ease-in-out infinite alternate;
-}
-
-.hero-art__noise-dot:nth-of-type(3n) {
-  animation-delay: -1.4s;
-}
-
-.hero-art__noise-dot:nth-of-type(3n + 2) {
-  animation-delay: -2.8s;
-}
-
-.hero-art__signal,
-.hero-art__signal-glow,
-.hero-art__signal-run {
-  fill: none;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.hero-art__signal-glow {
-  stroke: rgba(242, 198, 222, 0.34);
-  stroke-width: 16;
-  filter: blur(7px);
-}
-
-.hero-art__signal {
-  stroke: url("#hero-signal");
-  stroke-width: 3;
-  filter: drop-shadow(0 0 7px rgba(242, 198, 222, 0.9));
-}
-
-.hero-art__signal-run {
-  stroke: #fffaf6;
-  stroke-width: 5;
-  stroke-dasharray: 94 1034;
-  filter: drop-shadow(0 0 10px #f2c6de);
-  animation: hero-signal-run 4.8s linear infinite;
-}
-
-.hero-art__convergence {
-  filter: drop-shadow(0 0 9px rgba(75, 38, 62, 0.7));
-}
-
-@keyframes hero-signal-run {
-  to { stroke-dashoffset: -1128; }
-}
-
-@keyframes hero-noise-drift {
-  to { transform: translate3d(16px, -7px, 0); }
-}
-
-@keyframes hero-dot-pulse {
-  to { opacity: 0.35; }
 }
 
 .hero-inner,
@@ -549,15 +468,47 @@ button {
 .hero-index,
 .scroll-cue {
   position: absolute;
-  z-index: 2;
-  right: max(24px, calc((100vw - min(1240px, calc(100vw - 48px))) / 2));
-  bottom: 30px;
-  color: rgba(11, 9, 11, 0.52);
-  font-size: 0.66rem;
+  z-index: 3;
+  bottom: clamp(22px, 4svh, 44px);
+  /* Track the container at every breakpoint, and use 100% rather than 100vw so
+     the scrollbar does not push the cue out of alignment with the hero copy. */
+  left: calc((100% - var(--container)) / 2);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--plum);
+  font-size: 0.75rem;
   font-weight: 800;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  writing-mode: vertical-rl;
+}
+
+.scroll-cue__rail {
+  position: relative;
+  overflow: hidden;
+  width: 62px;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(75, 38, 62, 0.22);
+}
+
+.scroll-cue__dot {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 22px;
+  border-radius: 2px;
+  background: var(--magenta);
+  animation: scroll-cue-run 2.6s var(--ease) infinite;
+}
+
+.scroll-cue__text {
+  white-space: nowrap;
+}
+
+@keyframes scroll-cue-run {
+  0% { opacity: 0; transform: translateX(-22px); }
+  22%, 68% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(62px); }
 }
 
 .story {
@@ -589,152 +540,126 @@ button {
   min-height: 600px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 63% 48%, rgba(228, 206, 221, 0.17), transparent 24%),
-    radial-gradient(circle at 34% 72%, rgba(75, 38, 62, 0.36), transparent 30%),
+    radial-gradient(ellipse at 42% 50%, rgba(75, 38, 62, 0.42), transparent 62%),
     var(--ink);
 }
 
-.signal-visual::before {
-  position: absolute;
-  z-index: -1;
-  top: 50%;
-  left: 62%;
-  width: min(55vw, 760px);
-  aspect-ratio: 1;
-  border: 1px solid rgba(228, 206, 221, 0.12);
-  border-radius: 50%;
-  box-shadow: 0 0 0 7vw rgba(228, 206, 221, 0.025), 0 0 0 14vw rgba(228, 206, 221, 0.015);
-  content: "";
-  transform: translate(-50%, -50%);
-}
-
-.signal-visual::after {
-  position: absolute;
-  z-index: -1;
-  top: 12%;
-  bottom: 12%;
-  left: 62%;
-  width: 1px;
-  background: linear-gradient(transparent, rgba(228, 206, 221, 0.2), transparent);
-  content: "";
-}
-
-.signal-field {
+.signal-canvas {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
-.signal-line {
-  --noise-y: 0px;
-  --noise-r: 0deg;
-  --strategy-y: 0px;
-  --momentum-y: 0px;
-  --line-delay: 0s;
+.signal-labels {
   position: absolute;
-  top: 50%;
-  left: -18%;
-  width: 136%;
-  height: clamp(90px, 12vw, 180px);
-  border-top: 1px solid rgba(228, 206, 221, 0.5);
-  border-radius: 50%;
-  transform-origin: 68% center;
-  transition:
-    transform 1050ms var(--ease),
-    border-color 700ms ease,
-    border-width 700ms ease,
-    opacity 700ms ease,
-    filter 700ms ease;
+  inset: 0;
+  pointer-events: none;
 }
 
-.signal-line::after {
+.signal-label {
   position: absolute;
-  top: -3px;
+  top: 0;
   left: 0;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--blush);
-  box-shadow: 0 0 12px rgba(228, 206, 221, 0.75);
-  content: "";
-  animation: signal-travel 6.8s linear var(--line-delay) infinite;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 9px 3px 0;
+  color: rgba(255, 250, 246, 0.86);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: opacity 420ms ease, color 420ms ease;
+  will-change: transform, opacity;
 }
 
-.signal-line--1 { --noise-y: -210px; --noise-r: -14deg; --strategy-y: -72px; --momentum-y: -110px; --line-delay: -1s; }
-.signal-line--2 { --noise-y: -108px; --noise-r: 10deg; --strategy-y: -36px; --momentum-y: -72px; --line-delay: -3.2s; }
-.signal-line--3 { --noise-y: 4px; --noise-r: -8deg; --strategy-y: 0px; --momentum-y: -28px; --line-delay: -5.1s; }
-.signal-line--4 { --noise-y: 110px; --noise-r: 12deg; --strategy-y: 36px; --momentum-y: 18px; --line-delay: -2.1s; }
-.signal-line--5 { --noise-y: 212px; --noise-r: -11deg; --strategy-y: 72px; --momentum-y: 62px; --line-delay: -4.3s; }
-
-.signal-visual[data-state="noise"] .signal-line {
-  transform: translate3d(-4%, var(--noise-y), 0) rotate(var(--noise-r)) scaleX(0.86);
-  opacity: 0.62;
+.signal-label__name {
+  transition: opacity 420ms ease;
 }
 
-.signal-visual[data-state="signal"] .signal-line {
-  transform: translate3d(2%, 0, 0) rotate(-2deg) scaleX(0.94);
-  border-color: rgba(242, 198, 222, 0.76);
-  opacity: 0.88;
+.signal-label__value {
+  min-width: 3.1em;
+  color: var(--blush);
+  font-family: var(--display);
+  font-size: 1.24rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  opacity: 0;
+  transition: opacity 420ms ease, color 420ms ease;
 }
 
-.signal-visual[data-state="strategy"] .signal-line {
-  transform: translate3d(5%, var(--strategy-y), 0) rotate(0) scaleX(0.98);
-  border-color: rgba(228, 206, 221, 0.66);
-  opacity: 0.76;
-}
-
-.signal-visual[data-state="momentum"] .signal-line {
-  transform: translate3d(14%, var(--momentum-y), 0) rotate(-10deg) scaleX(1.06);
-  opacity: 0.24;
-}
-
-.signal-visual[data-state="momentum"] .signal-line--3 {
-  border-top-width: 3px;
-  border-color: #f2c6de;
+.signal-label[data-value] .signal-label__value {
   opacity: 1;
-  filter: drop-shadow(0 0 10px rgba(242, 198, 222, 0.72));
 }
 
-.signal-node {
+/* Figures fade out before they are rewritten, so a chapter change never shows
+   one chapter's number under another chapter's heading. */
+.signal-labels[data-swapping] .signal-label__value {
+  opacity: 0;
+}
+
+.signal-label[data-lead] {
+  color: var(--white);
+}
+
+.signal-label[data-lead] .signal-label__value {
+  color: #f2c6de;
+}
+
+.signal-caption {
   position: absolute;
-  top: 50%;
-  left: 62%;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #f2c6de;
-  box-shadow: 0 0 0 14px rgba(228, 206, 221, 0.08), 0 0 50px rgba(242, 198, 222, 0.58);
-  transition: transform 1050ms var(--ease), opacity 650ms ease;
-  animation: signal-node-pulse 3.6s ease-in-out infinite;
+  z-index: 2;
+  /* The panel sticks to the top of the viewport, so clear the fixed header. */
+  top: calc(var(--header-height) + clamp(16px, 3svh, 38px));
+  left: clamp(22px, 4%, 44px);
+  display: grid;
+  max-width: min(74%, 360px);
+  gap: 7px;
 }
 
-.signal-visual[data-state="noise"] .signal-node { transform: translate(-190px, 114px); opacity: 0.48; }
-.signal-visual[data-state="signal"] .signal-node { transform: translate(-18px, -8px); }
-.signal-visual[data-state="strategy"] .signal-node { transform: translate(68px, -7px); }
-.signal-visual[data-state="momentum"] .signal-node { transform: translate(190px, -94px); }
+.signal-caption__title {
+  color: var(--paper);
+  font-size: clamp(0.94rem, 1.5vw, 1.16rem);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  text-wrap: balance;
+  transition: opacity 290ms ease;
+}
 
-.signal-particle {
+.signal-caption__unit {
+  color: var(--blush);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  transition: opacity 290ms ease;
+}
+
+.signal-caption[data-swapping] .signal-caption__title,
+.signal-caption[data-swapping] .signal-caption__unit {
+  opacity: 0;
+}
+
+.signal-disclaimer {
   position: absolute;
-  width: 5px;
-  height: 5px;
-  background: var(--blush);
-  transition: transform 900ms var(--ease), opacity 600ms ease;
-  animation: signal-particle-drift 5s ease-in-out infinite alternate;
-}
-
-.signal-particle--1 { top: 23%; left: 16%; animation-delay: -1s; }
-.signal-particle--2 { top: 33%; left: 34%; width: 8px; height: 8px; animation-delay: -4s; }
-.signal-particle--3 { top: 67%; left: 25%; animation-delay: -2s; }
-.signal-particle--4 { top: 76%; left: 46%; width: 3px; height: 3px; animation-delay: -3s; }
-.signal-particle--5 { top: 18%; left: 53%; width: 4px; height: 4px; animation-delay: -5s; }
-.signal-particle--6 { top: 58%; left: 8%; width: 7px; height: 7px; animation-delay: -1.8s; }
-
-.signal-visual:not([data-state="noise"]) .signal-particle {
-  transform: translate3d(18vw, 0, 0) scale(0.35);
-  opacity: 0.08;
+  z-index: 2;
+  bottom: 28px;
+  left: clamp(22px, 4%, 44px);
+  max-width: min(64%, 330px);
+  margin: 0;
+  color: rgba(255, 250, 246, 0.46);
+  font-size: 0.68rem;
+  line-height: 1.5;
 }
 
 .signal-progress {
   position: absolute;
+  z-index: 2;
   right: 32px;
   bottom: 30px;
   display: flex;
@@ -756,18 +681,13 @@ button {
   background: var(--blush);
 }
 
-@keyframes signal-travel {
-  from { transform: translateX(0); opacity: 0; }
-  14%, 84% { opacity: 1; }
-  to { transform: translateX(76vw); opacity: 0; }
-}
-
-@keyframes signal-node-pulse {
-  50% { box-shadow: 0 0 0 22px rgba(228, 206, 221, 0.025), 0 0 68px rgba(242, 198, 222, 0.72); }
-}
-
-@keyframes signal-particle-drift {
-  to { translate: 18px -12px; opacity: 0.55; }
+.signal-data {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .story-steps,
@@ -781,10 +701,21 @@ button {
   flex-direction: column;
   justify-content: center;
   padding: 14svh 0;
+  /* One scroll gesture advances exactly one chapter, and always comes to rest
+     with that chapter centred against its panel. */
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
   opacity: 0.72;
   transition:
     opacity 500ms ease,
     transform 650ms var(--ease);
+}
+
+/* The sticky panel can only stay pinned for as long as the copy column is
+   tall. Without this trailing space the panel unsticks and scrolls away just
+   as chapter four becomes the active one. */
+.story__copy {
+  padding-bottom: 45svh;
 }
 
 .story-step[data-active] {
@@ -1705,9 +1636,8 @@ button {
     font-size: clamp(3.8rem, 16vw, 7rem);
   }
 
-  .hero-art__svg {
-    width: 112%;
-    opacity: 0.82;
+  .hero-art__canvas {
+    opacity: 0.72;
   }
 
   .hero::before {
@@ -1716,23 +1646,97 @@ button {
 
   .hero-index,
   .scroll-cue {
-    display: none;
+    font-size: 0.66rem;
+    letter-spacing: 0.13em;
   }
 
+  .scroll-cue__rail {
+    width: 40px;
+  }
+
+  /* The panel and the copy share one grid cell so the panel's sticky
+     containing block is as tall as the whole story, letting it stay pinned
+     under the header while the four chapters scroll past beneath it. */
   .story-shell,
   .story__inner {
-    display: block;
+    display: grid;
     width: var(--container);
+    grid-template-columns: 1fr;
     margin-inline: auto;
     padding-right: 0;
   }
 
+  .story__visual,
+  .story__copy {
+    grid-area: 1 / 1;
+  }
+
+  .story__copy {
+    padding-top: calc(min(56svh, 460px) + 36px);
+    padding-bottom: 30svh;
+  }
+
   .signal-visual {
-    position: relative;
-    top: auto;
-    z-index: 2;
-    height: 260px;
-    min-height: 0;
+    top: var(--header-height);
+    z-index: 3;
+    height: min(56svh, 460px);
+    min-height: 320px;
+    margin-inline: calc(50% - 50vw);
+    border-bottom: 1px solid rgba(228, 206, 221, 0.14);
+  }
+
+  /* The panel already sits below the header here, so the caption must not
+     offset by the header height a second time. */
+  .signal-caption {
+    top: 16px;
+    left: 18px;
+    max-width: min(72%, 290px);
+    gap: 4px;
+  }
+
+  .signal-caption__title {
+    font-size: 0.92rem;
+  }
+
+  .signal-caption__unit {
+    font-size: 0.58rem;
+    letter-spacing: 0.14em;
+  }
+
+  .signal-disclaimer {
+    bottom: 12px;
+    left: 18px;
+    max-width: 58%;
+    font-size: 0.56rem;
+    line-height: 1.4;
+  }
+
+  .signal-progress {
+    right: 18px;
+    bottom: 14px;
+    gap: 6px;
+  }
+
+  .signal-progress span {
+    width: 16px;
+  }
+
+  .signal-visual[data-state="noise"] .signal-progress span:nth-child(1),
+  .signal-visual[data-state="signal"] .signal-progress span:nth-child(2),
+  .signal-visual[data-state="strategy"] .signal-progress span:nth-child(3),
+  .signal-visual[data-state="momentum"] .signal-progress span:nth-child(4) {
+    width: 30px;
+  }
+
+  .signal-label {
+    padding-right: 4px;
+    font-size: 0.58rem;
+    gap: 5px;
+  }
+
+  .signal-label__value {
+    min-width: 2.6em;
+    font-size: 0.9rem;
   }
 
   .story-step {
@@ -1740,6 +1744,11 @@ button {
     padding: 86px 0;
     opacity: 1;
   }
+
+  .story-step:first-child {
+    padding-top: 52px;
+  }
+
 
   .story-step[data-active] {
     transform: none;
@@ -1887,6 +1896,8 @@ button {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+    /* Snapping without a smooth scroll is an abrupt jump, so drop it here. */
+    scroll-snap-type: none;
   }
 
   *,
@@ -1911,16 +1922,14 @@ button {
     opacity: 1;
   }
 
-  .signal-visual,
   .proof-sticky {
     position: static;
   }
 
-  .hero-art *,
-  .signal-line::after,
-  .signal-node,
-  .signal-particle {
+  .scroll-cue__dot {
     animation: none !important;
+    opacity: 1;
+    transform: none;
   }
 
   .team-card__image img {

@@ -112,72 +112,7 @@
     <main id="main-content">
       <section id="top" class="hero" aria-labelledby="hero-title">
         <div class="hero-art" aria-hidden="true">
-          <svg class="hero-art__svg" viewBox="0 0 1728 910" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="hero-blush" x1="0" y1="1" x2="1" y2="0">
-                <stop offset="0" stop-color="#caa6bd" stop-opacity="0.45"></stop>
-                <stop offset="0.52" stop-color="#e4cedd" stop-opacity="0.9"></stop>
-                <stop offset="1" stop-color="#f4e9f0" stop-opacity="0.96"></stop>
-              </linearGradient>
-              <linearGradient id="hero-ink" x1="0" y1="1" x2="1" y2="0">
-                <stop offset="0" stop-color="#21141d"></stop>
-                <stop offset="0.5" stop-color="#090809"></stop>
-                <stop offset="1" stop-color="#171016"></stop>
-              </linearGradient>
-              <linearGradient id="hero-signal" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0" stop-color="#c9257b"></stop>
-                <stop offset="0.58" stop-color="#f3b9d8"></stop>
-                <stop offset="1" stop-color="#fff7fb"></stop>
-              </linearGradient>
-            </defs>
-
-            <path
-              class="hero-art__blush"
-              d="M760 960C840 790 890 660 964 606C1050 542 1150 546 1238 522C1386 482 1420 282 1514 122C1574 20 1648-44 1754-96L1870-84C1720 100 1664 282 1594 458C1520 644 1424 772 1298 810C1160 850 1054 786 970 842C908 884 864 932 838 990Z"
-            ></path>
-
-            <g class="hero-art__noise">
-              <path class="hero-art__noise-line" d="M-40 552C220 472 460 770 980 650"></path>
-              <path class="hero-art__noise-line hero-art__noise-line--soft" d="M-50 607C250 740 520 500 980 650"></path>
-              <path class="hero-art__noise-line" d="M-20 660C200 590 420 825 980 650"></path>
-              <path class="hero-art__noise-line hero-art__noise-line--soft" d="M-20 710C300 840 640 470 980 650"></path>
-              <path class="hero-art__noise-line" d="M-30 760C280 650 560 870 980 650"></path>
-              <path class="hero-art__noise-line hero-art__noise-line--soft" d="M-30 812C350 715 590 520 980 650"></path>
-              <path class="hero-art__noise-line" d="M140 888C430 670 650 830 980 650"></path>
-              <circle class="hero-art__noise-dot" cx="42" cy="618" r="4"></circle>
-              <circle class="hero-art__noise-dot" cx="78" cy="752" r="2.5"></circle>
-              <circle class="hero-art__noise-dot" cx="126" cy="574" r="3"></circle>
-              <circle class="hero-art__noise-dot" cx="184" cy="824" r="5"></circle>
-              <circle class="hero-art__noise-dot" cx="242" cy="666" r="2.5"></circle>
-              <circle class="hero-art__noise-dot" cx="298" cy="590" r="4"></circle>
-              <circle class="hero-art__noise-dot" cx="352" cy="780" r="3"></circle>
-              <circle class="hero-art__noise-dot" cx="432" cy="704" r="5"></circle>
-              <circle class="hero-art__noise-dot" cx="510" cy="842" r="2.5"></circle>
-              <circle class="hero-art__noise-dot" cx="574" cy="624" r="3.5"></circle>
-              <circle class="hero-art__noise-dot" cx="646" cy="758" r="2.5"></circle>
-              <circle class="hero-art__noise-dot" cx="722" cy="566" r="4"></circle>
-              <circle class="hero-art__noise-dot" cx="786" cy="814" r="3"></circle>
-              <circle class="hero-art__noise-dot" cx="852" cy="704" r="2.5"></circle>
-            </g>
-
-            <path
-              class="hero-art__ribbon"
-              d="M825 960C885 830 930 705 980 650C1040 584 1125 580 1205 580C1350 580 1400 410 1470 270C1540 130 1620 15 1748-80L1860-80C1710 100 1645 245 1580 410C1510 590 1435 705 1320 755C1190 812 1070 775 995 825C930 868 890 925 860 980Z"
-            ></path>
-            <path
-              class="hero-art__signal-glow"
-              d="M980 650C1120 680 1290 685 1380 575C1465 470 1510 300 1585 220C1640 160 1690 135 1750 125"
-            ></path>
-            <path
-              class="hero-art__signal"
-              d="M980 650C1120 680 1290 685 1380 575C1465 470 1510 300 1585 220C1640 160 1690 135 1750 125"
-            ></path>
-            <path
-              class="hero-art__signal-run"
-              d="M980 650C1120 680 1290 685 1380 575C1465 470 1510 300 1585 220C1640 160 1690 135 1750 125"
-            ></path>
-            <circle class="hero-art__convergence" cx="980" cy="650" r="5"></circle>
-          </svg>
+          <canvas class="hero-art__canvas" data-hero-art></canvas>
         </div>
         <div class="hero__inner">
           <p class="eyebrow">Marketing strategy + planning for ambitious Australian businesses</p>
@@ -193,29 +128,50 @@
             </div>
           </div>
         </div>
-        <span class="scroll-cue" aria-hidden="true">Scroll to find the signal</span>
+        <span class="scroll-cue" aria-hidden="true">
+          <span class="scroll-cue__rail"><span class="scroll-cue__dot"></span></span>
+          <span class="scroll-cue__text">Scroll to find the signal</span>
+        </span>
       </section>
 
       <section id="approach" class="story" aria-label="The KRM approach">
         <div class="story__inner">
-          <div class="story__visual" aria-hidden="true">
-            <div class="signal-visual" data-state="noise">
-              <div class="signal-field">
-                <span class="signal-line signal-line--1"></span>
-                <span class="signal-line signal-line--2"></span>
-                <span class="signal-line signal-line--3"></span>
-                <span class="signal-line signal-line--4"></span>
-                <span class="signal-line signal-line--5"></span>
-                <span class="signal-node"></span>
-                <span class="signal-particle signal-particle--1"></span>
-                <span class="signal-particle signal-particle--2"></span>
-                <span class="signal-particle signal-particle--3"></span>
-                <span class="signal-particle signal-particle--4"></span>
-                <span class="signal-particle signal-particle--5"></span>
-                <span class="signal-particle signal-particle--6"></span>
+          <div class="story__visual">
+            <div class="signal-visual" data-state="noise" data-signal-visual>
+              <canvas class="signal-canvas" data-signal-canvas aria-hidden="true"></canvas>
+              <div class="signal-labels" data-signal-labels aria-hidden="true"></div>
+
+              <div class="signal-caption" aria-hidden="true">
+                <span class="signal-caption__title" data-signal-title></span>
+                <span class="signal-caption__unit" data-signal-unit></span>
               </div>
-              <div class="signal-progress">
+
+              <p class="signal-disclaimer">
+                Illustrative example — indicative channel figures used to show how KRM
+                presents a media mix, not results from a specific client.
+              </p>
+
+              <div class="signal-progress" aria-hidden="true">
                 <span></span><span></span><span></span><span></span>
+              </div>
+
+              <div class="signal-data" data-signal-data>
+                <h3>Illustrative media mix</h3>
+                <p>
+                  A worked example of the same channels read four ways as the story
+                  progresses. Indicative figures only.
+                </p>
+                <table>
+                  <caption>Illustrative channel mix</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Channel</th>
+                      <th scope="col">Share of optimised spend</th>
+                      <th scope="col">Share of measured growth</th>
+                    </tr>
+                  </thead>
+                  <tbody data-signal-data-rows></tbody>
+                </table>
               </div>
             </div>
           </div>

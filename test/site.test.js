@@ -25,17 +25,113 @@ test('the testimonial demo uses only the three approved videos', () => {
   assert.doesNotMatch(`${html}\n${script}`, /[?&]autoplay=1|<(?:video|iframe)\b[^>]*\bautoplay\b/i);
 });
 
-test('the richer visual treatment keeps the old boxed signal label out', () => {
+test('the hero and story artwork are canvas driven, with the old vectors gone', () => {
   const html = read('index.html');
 
   assert.match(html, /class="hero-art"/);
-  assert.equal((html.match(/class="hero-art__ribbon"/g) || []).length, 1);
-  assert.equal((html.match(/class="hero-art__signal-run"/g) || []).length, 1);
-  assert.doesNotMatch(html, /hero-art__orbit|hero-art__river/);
+  assert.equal((html.match(/data-hero-art/g) || []).length, 1);
+  assert.equal((html.match(/data-signal-canvas/g) || []).length, 1);
+  assert.doesNotMatch(html, /hero-art__ribbon|hero-art__signal-run|hero-art__noise/);
+  assert.doesNotMatch(html, /signal-line signal-line--|signal-particle|class="signal-node"/);
   assert.match(html, /<strong class="proof-card__channel">Channel 9<\/strong>/);
-  assert.equal((html.match(/signal-line signal-line--/g) || []).length, 5);
-  assert.doesNotMatch(html, /data-signal-label/);
   assert.equal((html.match(/team-card__tag/g) || []).length, 2);
+});
+
+test('the scroll cue is readable rather than a clipped vertical string', () => {
+  const html = read('index.html');
+  const css = read('styles.css');
+  const cue = css.slice(css.indexOf('.hero-index,'), css.indexOf('@keyframes scroll-cue-run'));
+
+  assert.match(html, /class="scroll-cue__text">Scroll to find the signal</);
+  assert.doesNotMatch(cue, /writing-mode/);
+  assert.match(cue, /color: var\(--plum\)/);
+});
+
+test('the illustrative channel figures stay internally consistent', async () => {
+  const { CHANNELS, STORY_STATES } = await import('../script.js');
+  const total = (key) => CHANNELS.reduce((sum, channel) => sum + channel[key], 0);
+
+  assert.equal(total('spend'), 100);
+  assert.equal(total('growth'), 100);
+  assert.ok(CHANNELS.every(({ name }) => name.trim().length > 0));
+
+  // Every metric a chapter asks for must exist on every channel.
+  Object.values(STORY_STATES).forEach(({ metric, title, unit }) => {
+    assert.ok(title && unit, 'each chapter needs a caption');
+    if (metric) {
+      assert.ok(CHANNELS.every((channel) => Number.isFinite(channel[metric])));
+    }
+  });
+
+  assert.equal(STORY_STATES.signal.title, 'The best ROI for advertising');
+  assert.equal(STORY_STATES.strategy.title, 'Optimised advertising spend');
+});
+
+test('every chapter supplies every morphable value', async () => {
+  const { CHANNELS, STORY_STATES, MORPH_KEYS, storyTargets } = await import('../script.js');
+  const layout = {
+    height: 900, compact: false, midY: 450, nodeX: 300, endX: 574, labelX: 600,
+    fanSpan: 380, labelSpan: 430, stackHeight: 470
+  };
+
+  // A key missing from one chapter interpolates to NaN and silently blanks
+  // that strand, which is invisible in tests but obvious on the page.
+  Object.keys(STORY_STATES).forEach((state) => {
+    CHANNELS.forEach((channel, index) => {
+      const target = storyTargets(state, index, layout);
+      MORPH_KEYS.forEach((key) => {
+        assert.ok(
+          Number.isFinite(target[key]),
+          `${state}/${channel.name} is missing a finite "${key}"`
+        );
+      });
+    });
+  });
+});
+
+test('the plan and the result are drawn differently', async () => {
+  const { CHANNELS, storyTargets } = await import('../script.js');
+  const layout = {
+    height: 900, compact: false, midY: 450, nodeX: 300, endX: 574, labelX: 600,
+    fanSpan: 380, labelSpan: 430, stackHeight: 470
+  };
+  const at = (state) => CHANNELS.map((_, index) => storyTargets(state, index, layout));
+
+  const strategy = at('strategy');
+  const momentum = at('momentum');
+
+  // Only the measurement chapter switches to the trajectory treatment.
+  assert.ok(['noise', 'signal', 'strategy'].every((s) => at(s).every((t) => t.trend === 0)));
+  assert.ok(momentum.every((t) => t.trend === 1));
+
+  // The two chapters must not resolve to the same picture.
+  assert.ok(strategy.some((t, i) => Math.abs(t.endY - momentum[i].endY) > 20));
+
+  // Stacked bands sit in declared order and touch without overlapping.
+  strategy.slice(1).forEach((band, i) => {
+    const above = strategy[i];
+    const gap = (band.endY - band.weight / 2) - (above.endY + above.weight / 2);
+    assert.ok(Math.abs(gap) < 1, 'spend bands should stack flush');
+  });
+
+  // Email & CRM returns more than it costs, so its label overtakes Out-of-home
+  // and Radio when the chapter turns to measured growth.
+  const crm = CHANNELS.findIndex((c) => c.name === 'Email & CRM');
+  const ooh = CHANNELS.findIndex((c) => c.name === 'Out-of-home');
+  assert.ok(strategy[crm].labelY > strategy[ooh].labelY, 'ranked below on spend');
+  assert.ok(momentum[crm].labelY < momentum[ooh].labelY, 'ranked above on growth');
+
+  // Bigger contribution means a higher end point.
+  const google = CHANNELS.findIndex((c) => c.name === 'Google / Search');
+  const print = CHANNELS.findIndex((c) => c.name === 'Print');
+  assert.ok(momentum[google].endY < momentum[print].endY);
+});
+
+test('the illustrative figures are labelled as illustrative', () => {
+  const html = read('index.html');
+
+  assert.match(html, /Illustrative example — indicative channel figures/);
+  assert.match(html, /not results from a specific client/);
 });
 
 test('preview redirects and indexing protections stay configured', () => {
