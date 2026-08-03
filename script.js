@@ -1084,59 +1084,6 @@ function setupDemoForm() {
   });
 }
 
-/**
- * Turns chapter snapping on only while the hero and the story are on screen.
- * The boundary is chosen so it flips exactly at a snap position — when the
- * story first covers the viewport the first chapter is already centred — which
- * means enabling it can never yank the page.
- */
-function setupChapterSnap() {
-  const story = $(".story");
-  const after = story?.nextElementSibling;
-  if (!story || !after || reducedMotion()) return;
-
-  const root = document.documentElement;
-  // Chapters are a full viewport tall only on the wide layout. On a phone they
-  // are short blocks under a pinned panel, where several would sit inside the
-  // snapport at once and snapping fights the scroll instead of guiding it.
-  const wide = window.matchMedia("(min-width: 821px)");
-
-  let release = Infinity;
-  let queued = false;
-
-  const apply = () => {
-    root.toggleAttribute(
-      "data-chapter-snap",
-      wide.matches && window.scrollY < release,
-    );
-  };
-
-  // Measured on a frame rather than during the scroll event, so scrolling never
-  // has to wait for a synchronous layout.
-  const measure = () => {
-    queued = false;
-    // Release exactly where the section after the story snaps to. Toggling on
-    // any other position races the snap engine, which has already chosen its
-    // target: it wins, and the page sticks on the last chapter. Flipping the
-    // switch on a snap position means neither answer moves the page.
-    const offset = parseFloat(getComputedStyle(after).scrollMarginTop) || 0;
-    release = window.scrollY + after.getBoundingClientRect().top - offset - 2;
-    apply();
-  };
-
-  const remeasure = () => {
-    if (queued) return;
-    queued = true;
-    window.requestAnimationFrame(measure);
-  };
-
-  measure();
-  window.addEventListener("scroll", apply, { passive: true });
-  window.addEventListener("resize", remeasure, { passive: true });
-  wide.addEventListener?.("change", remeasure);
-  if ("ResizeObserver" in window) new ResizeObserver(remeasure).observe(story);
-}
-
 function setupHeader() {
   const header = $(".site-header");
   if (!header) return;
@@ -1150,7 +1097,6 @@ if (typeof document !== "undefined") {
   setupHeader();
   setupHeroArt();
   setupScrollStory();
-  setupChapterSnap();
   setupReveals();
   setupTestimonials();
   setupDemoForm();

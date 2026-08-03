@@ -26,19 +26,14 @@
 }
 
 html {
-  scroll-behavior: smooth;
-  background: var(--paper);
-}
-
-/* Snapping is switched on only while the hero and the story are on screen, so
-   one scroll always advances a whole chapter there, and the tall sections
-   further down are never made unreachable by a mandatory snap.
-   scroll-behavior is dropped while it is on: a smooth-scroll animation and the
-   snap engine retarget each other and the result stutters. Snapping animates
-   on its own, so the movement stays smooth without it. */
-html[data-chapter-snap] {
-  scroll-behavior: auto;
+  /* One scroll moves one section. Every block down the page carries a snap
+     position, because a mandatory snap with gaps in it traps the scroll: with
+     nothing to move to, it drags the page back where it came from.
+     scroll-behavior is deliberately not smooth here — a smooth-scroll
+     animation and the snap engine retarget each other and the result stutters.
+     Snapping animates on its own. */
   scroll-snap-type: y mandatory;
+  background: var(--paper);
 }
 
 body {
@@ -125,12 +120,15 @@ button {
   scroll-margin-top: calc(var(--header-height) + 24px);
 }
 
-/* The last chapter needs somewhere to go. Without a snap position below it, a
-   mandatory snap has nothing to move to and drags the page back into the
-   story. This section is far taller than the viewport, so once it is reached
-   the snap becomes a range and scrolling is free again. */
-.story + .section {
+.hero,
+.section {
   scroll-snap-align: start;
+}
+
+/* Aligning the footer to the end puts its snap position at the very bottom of
+   the document, so the last stretch of the page stays reachable. */
+.site-footer {
+  scroll-snap-align: end;
 }
 
 .section {
@@ -388,7 +386,6 @@ button {
   isolation: isolate;
   display: grid;
   min-height: 100svh;
-  scroll-snap-align: start;
   align-items: start;
   overflow: hidden;
   padding: max(calc(var(--header-height) + 48px), 11svh) 0 clamp(64px, 8svh, 110px);
@@ -1765,6 +1762,13 @@ button {
     min-height: auto;
     padding: 86px 0;
     opacity: 1;
+  }
+
+  /* Chapters are only a full screen tall on the wide layout. Here they are
+     short blocks beneath a pinned panel, so several sit inside the viewport at
+     once and snapping would fight the scroll rather than guide it. */
+  html {
+    scroll-snap-type: none;
   }
 
   .story-step:first-child {
