@@ -382,7 +382,9 @@ button {
   position: absolute;
   z-index: 1;
   inset: 0;
-  background: linear-gradient(90deg, rgba(255, 250, 246, 0.62) 0 30%, rgba(255, 250, 246, 0.5) 46%, rgba(255, 250, 246, 0.12) 66%, transparent 76%);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 246, 0.5) 0 70%, rgba(255, 250, 246, 0.12) 82%, transparent 88%),
+    linear-gradient(90deg, rgba(255, 250, 246, 0.28) 0 36%, rgba(255, 250, 246, 0.12) 54%, transparent 72%);
   content: "";
   pointer-events: none;
 }
@@ -645,18 +647,6 @@ button {
 .signal-caption[data-swapping] .signal-caption__title,
 .signal-caption[data-swapping] .signal-caption__unit {
   opacity: 0;
-}
-
-.signal-disclaimer {
-  position: absolute;
-  z-index: 2;
-  bottom: 28px;
-  left: clamp(22px, 4%, 44px);
-  max-width: min(64%, 330px);
-  margin: 0;
-  color: rgba(255, 250, 246, 0.46);
-  font-size: 0.68rem;
-  line-height: 1.5;
 }
 
 .signal-progress {
@@ -1699,14 +1689,6 @@ button {
   .signal-caption__unit {
     font-size: 0.58rem;
     letter-spacing: 0.14em;
-  }
-
-  .signal-disclaimer {
-    bottom: 12px;
-    left: 18px;
-    max-width: 58%;
-    font-size: 0.56rem;
-    line-height: 1.4;
   }
 
   .signal-progress {

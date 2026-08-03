@@ -174,243 +174,215 @@ function createStage(canvas, draw) {
 }
 
 const HERO_STRAND_COUNT = 9;
-const HERO_SEGMENTS = 54;
+const HERO_SEGMENTS = 72;
 
 /**
- * Hero artwork: many channel strands flow in from the left, braid together and
- * merge into a single signal that opens out towards the top right.
+ * One continuous hero line. The incoming section stays in the bottom strip so
+ * the artwork cannot run through the headline or calls to action, then every
+ * strand converges and rises independently on the right.
+ */
+export function heroLinePoint(progress, index, geometry, time = 0, pointer = {}) {
+  const t = clamp(progress, 0, 1);
+  const { width, height } = geometry;
+  const phase = index * 0.83;
+  const focusX = width * 0.635;
+  const focusY = height * 0.805;
+  const pointerX = pointer.x || 0;
+  const pointerY = pointer.y || 0;
+  const pointerActive = pointer.active || 0;
+
+  if (t <= 0.62) {
+    const u = t / 0.62;
+    const startY = height * (0.885 + (index / (HERO_STRAND_COUNT - 1)) * 0.085);
+    const converge = smooth(clamp((u - 0.82) / 0.18, 0, 1));
+    const wave =
+      Math.sin(u * (6.4 + index * 0.18) + time * (0.42 + index * 0.018) + phase) *
+      height *
+      (0.0035 + (index % 3) * 0.0012) *
+      (1 - smooth(u));
+
+    return {
+      x: lerp(-width * 0.045, focusX, u),
+      y: lerp(startY, focusY, converge) + wave,
+    };
+  }
+
+  const u = (t - 0.62) / 0.38;
+  const oneMinus = 1 - u;
+  const endY = height * (0.025 + index * 0.058);
+  const p1x = width * 0.735;
+  const p1y = focusY - height * (0.018 + index * 0.003);
+  const p2x = width * 0.88;
+  const p2y = height * (0.22 + index * 0.047);
+  const endX = width * 1.06;
+  const x =
+    oneMinus ** 3 * focusX +
+    3 * oneMinus ** 2 * u * p1x +
+    3 * oneMinus * u ** 2 * p2x +
+    u ** 3 * endX;
+  const y =
+    oneMinus ** 3 * focusY +
+    3 * oneMinus ** 2 * u * p1y +
+    3 * oneMinus * u ** 2 * p2y +
+    u ** 3 * endY;
+  const wave =
+    Math.sin(u * 5.4 - time * (0.36 + index * 0.014) + phase) *
+    height *
+    0.0045 *
+    smooth(u);
+  const parallax = smooth(u) * pointerActive;
+
+  return {
+    x: x + pointerX * width * 0.012 * parallax,
+    y: y + wave + pointerY * height * 0.028 * parallax,
+  };
+}
+
+/**
+ * Hero artwork: multiple strategic inputs travel through a protected lower
+ * channel, converge, and resolve into a family of focused rising signals.
  */
 function setupHeroArt() {
   const canvas = $("[data-hero-art]");
   if (!canvas) return;
 
-  // Deterministic per-strand character, so the composition is stable on reload.
-  const strands = Array.from({ length: HERO_STRAND_COUNT }, (_, index) => ({
-    origin: 0.2 + (index / (HERO_STRAND_COUNT - 1)) * 0.92,
-    amplitude: 0.035 + ((index * 37) % 11) / 150,
-    fast: 2.2 + ((index * 53) % 17) / 6,
-    slow: 4.9 + ((index * 29) % 13) / 4,
-    driftA: 0.24 + ((index * 41) % 9) / 44,
-    driftB: 0.33 + ((index * 17) % 7) / 26,
-    phase: index * 1.37,
-    weight: 0.75 + ((index * 23) % 5) / 5,
-    flow: 0.1 + ((index * 11) % 7) / 90,
-  }));
+  const hero = canvas.closest(".hero");
+  const target = { x: 0, y: 0, active: 0 };
+  const pointer = { x: 0, y: 0, active: 0 };
+  const canInteract =
+    !reducedMotion() && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
-  const motes = Array.from({ length: 16 }, (_, index) => ({
-    x: 0.03 + ((index * 61) % 100) / 168,
-    y: 0.56 + ((index * 47) % 100) / 214,
-    size: 1.4 + ((index * 13) % 7) / 2.4,
-    speed: 0.18 + ((index * 31) % 9) / 30,
-    phase: index * 0.83,
-  }));
+  if (canInteract && hero) {
+    hero.addEventListener("pointermove", (event) => {
+      const rect = hero.getBoundingClientRect();
+      target.x = clamp(((event.clientX - rect.left) / rect.width - 0.5) * 2, -1, 1);
+      target.y = clamp(((event.clientY - rect.top) / rect.height - 0.5) * 2, -1, 1);
+      target.active = 1;
+    });
+    hero.addEventListener("pointerleave", () => {
+      target.x = 0;
+      target.y = 0;
+      target.active = 0;
+    });
+  }
 
-  const spineAt = (t, geo) => {
-    const u = 1 - t;
-    const x =
-      u * u * u * geo.cx +
-      3 * u * u * t * geo.p1x +
-      3 * u * t * t * geo.p2x +
-      t * t * t * geo.ex;
-    const y =
-      u * u * u * geo.cy +
-      3 * u * u * t * geo.p1y +
-      3 * u * t * t * geo.p2y +
-      t * t * t * geo.ey;
-    return { x, y };
-  };
+  const palette = [
+    [75, 38, 62],
+    [99, 39, 75],
+    [123, 41, 87],
+    [151, 43, 101],
+    [201, 37, 123],
+    [181, 65, 126],
+    [157, 84, 132],
+    [128, 92, 128],
+    [91, 70, 99],
+  ];
 
-  createStage(canvas, (ctx, stage) => {
+  createStage(canvas, (ctx, stage, delta) => {
     const { width, height, time } = stage;
-    const cx = width * 0.6;
-    const cy = height * 0.66;
-    const breathe = Math.sin(time * 0.34) * height * 0.014;
-
-    const geo = {
-      cx,
-      cy,
-      p1x: cx + width * 0.16,
-      p1y: cy - height * 0.08 + breathe,
-      p2x: width * 0.85,
-      p2y: height * 0.16 - breathe,
-      ex: width * 1.1,
-      ey: -height * 0.14,
-    };
+    const geometry = { width, height };
+    const ease = 1 - Math.exp(-delta * 4.5);
+    pointer.x = lerp(pointer.x, target.x, ease);
+    pointer.y = lerp(pointer.y, target.y, ease);
+    pointer.active = lerp(pointer.active, target.active, ease);
+    const at = (t, index) => heroLinePoint(t, index, geometry, time, pointer);
 
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    // Drifting motes in the noisy field on the left.
-    motes.forEach((mote) => {
-      const x = mote.x * width + Math.sin(time * mote.speed + mote.phase) * width * 0.012;
-      const y = mote.y * height + Math.cos(time * mote.speed * 0.8 + mote.phase) * height * 0.02;
-      const pulse = 0.24 + (Math.sin(time * 0.9 + mote.phase) + 1) * 0.16;
+    // A quiet responsive wash gives the entire field depth without creating a
+    // bright cursor spotlight or reducing contrast behind the copy.
+    const washX = width * (0.8 + pointer.x * 0.045 * pointer.active);
+    const washY = height * (0.48 + pointer.y * 0.06 * pointer.active);
+    const washRadius = Math.max(width, height) * 0.48;
+    const wash = ctx.createRadialGradient(washX, washY, 0, washX, washY, washRadius);
+    wash.addColorStop(0, `rgba(228, 206, 221, ${(0.22 + pointer.active * 0.04).toFixed(3)})`);
+    wash.addColorStop(0.55, "rgba(228, 206, 221, 0.06)");
+    wash.addColorStop(1, "rgba(228, 206, 221, 0)");
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, 0, width, height);
+
+    // Fine shadow contours replace the old solid block on the right. Their
+    // shared movement creates volume while every individual path stays visible.
+    for (let layer = 0; layer < 18; layer += 1) {
+      const index = (layer / 17) * (HERO_STRAND_COUNT - 1);
       ctx.beginPath();
-      ctx.arc(x, y, mote.size, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(75, 38, 62, ${pulse.toFixed(3)})`;
-      ctx.fill();
-    });
-
-    // The merged flow, drawn as a band that opens out towards the top right.
-    const steps = 40;
-    const near = [];
-    const far = [];
-    const maxHalf = Math.min(width * 0.115, 132);
-    for (let i = 0; i <= steps; i += 1) {
-      const t = i / steps;
-      const point = spineAt(t, geo);
-      const ahead = spineAt(Math.min(1, t + 0.01), geo);
-      const behind = spineAt(Math.max(0, t - 0.01), geo);
-      const dx = ahead.x - behind.x;
-      const dy = ahead.y - behind.y;
-      const length = Math.hypot(dx, dy) || 1;
-      const half = 1.6 + Math.pow(t, 1.35) * maxHalf;
-      near.push([point.x - (dy / length) * half, point.y + (dx / length) * half]);
-      far.push([point.x + (dy / length) * half, point.y - (dx / length) * half]);
-    }
-
-    ctx.beginPath();
-    near.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    for (let i = far.length - 1; i >= 0; i -= 1) ctx.lineTo(far[i][0], far[i][1]);
-    ctx.closePath();
-
-    const band = ctx.createLinearGradient(geo.cx, geo.cy, geo.ex, geo.ey);
-    band.addColorStop(0, "#3b2231");
-    band.addColorStop(0.45, "#140e14");
-    band.addColorStop(1, "#0b090b");
-    ctx.fillStyle = band;
-    ctx.shadowColor = "rgba(75, 38, 62, 0.3)";
-    ctx.shadowBlur = 48;
-    ctx.shadowOffsetX = -18;
-    ctx.shadowOffsetY = 16;
-    ctx.fill();
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-
-    // Incoming strands, braiding as they approach the merge point.
-    strands.forEach((strand, index) => {
-      const startY = height * strand.origin;
-      const strandAt = (t) => {
-        const wobble =
-          Math.sin(t * strand.fast + time * strand.driftA + strand.phase) * 0.66 +
-          Math.sin(t * strand.slow - time * strand.driftB + strand.phase * 0.7) * 0.34;
-        return {
-          x: lerp(-width * 0.06, cx, t),
-          y:
-            lerp(startY, cy, smooth(t)) +
-            wobble * strand.amplitude * height * Math.pow(1 - t, 1.4),
-        };
-      };
-
-      ctx.beginPath();
-      for (let i = 0; i <= HERO_SEGMENTS; i += 1) {
-        const point = strandAt(i / HERO_SEGMENTS);
-        if (i) ctx.lineTo(point.x, point.y);
+      for (let segment = 0; segment <= 44; segment += 1) {
+        const t = 0.62 + (segment / 44) * 0.38;
+        const point = at(t, index);
+        if (segment) ctx.lineTo(point.x, point.y);
         else ctx.moveTo(point.x, point.y);
       }
-      const ink = ctx.createLinearGradient(-width * 0.06, 0, cx, 0);
-      ink.addColorStop(0, "rgba(75, 38, 62, 0.16)");
-      ink.addColorStop(0.45, "rgba(75, 38, 62, 0.48)");
-      ink.addColorStop(0.82, "rgba(160, 46, 108, 0.76)");
-      ink.addColorStop(1, "rgba(201, 37, 123, 0.96)");
-      ctx.strokeStyle = ink;
-      ctx.lineWidth = strand.weight * 1.16;
+      ctx.strokeStyle = `rgba(20, 14, 20, ${(0.035 + layer * 0.003).toFixed(3)})`;
+      ctx.lineWidth = 5 + layer * 0.7;
       ctx.stroke();
-
-      // Data running down each strand towards the merge point.
-      for (let p = 0; p < 2; p += 1) {
-        const head = (time * strand.flow + index * 0.19 + p * 0.5) % 1;
-        const tail = Math.max(0, head - 0.09);
-        // Brightest near the merge, invisible at the far edges.
-        const fade = Math.sin(head * Math.PI) * Math.pow(head, 0.7);
-        if (fade < 0.03) continue;
-
-        ctx.beginPath();
-        for (let s = 0; s <= 6; s += 1) {
-          const point = strandAt(lerp(tail, head, s / 6));
-          if (s) ctx.lineTo(point.x, point.y);
-          else ctx.moveTo(point.x, point.y);
-        }
-        ctx.strokeStyle = `rgba(201, 37, 123, ${(fade * 0.72).toFixed(3)})`;
-        ctx.lineWidth = strand.weight * 1.7;
-        ctx.stroke();
-
-        const dot = strandAt(head);
-        ctx.beginPath();
-        ctx.arc(dot.x, dot.y, 1.8, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(120, 30, 78, ${fade.toFixed(3)})`;
-        ctx.fill();
-      }
-    });
-
-    // The single signal running through the merged flow.
-    ctx.beginPath();
-    for (let i = 0; i <= steps; i += 1) {
-      const point = spineAt(i / steps, geo);
-      if (i) ctx.lineTo(point.x, point.y);
-      else ctx.moveTo(point.x, point.y);
     }
-    const signal = ctx.createLinearGradient(geo.cx, geo.cy, geo.ex, geo.ey);
-    signal.addColorStop(0, "#c9257b");
-    signal.addColorStop(0.55, "#f3b9d8");
-    signal.addColorStop(1, "#f8dbea");
 
-    ctx.strokeStyle = "rgba(201, 37, 123, 0.16)";
-    ctx.lineWidth = 9;
-    ctx.stroke();
-    ctx.strokeStyle = signal;
-    ctx.lineWidth = 2.2;
-    ctx.stroke();
-
-    // A tapered colour wave travelling out along the signal. Drawing short
-    // graduated segments avoids the solid white bar produced by one glowing
-    // stroke, while the envelope fades both ends into the base signal.
-    const pulseLength = 0.28;
-    const travel = (time * 0.16) % 1;
-    const tail = travel - pulseLength;
-    ctx.save();
-    ctx.lineCap = "butt";
-    for (let i = 0; i < 36; i += 1) {
-      const fromT = lerp(tail, travel, i / 36);
-      const toT = lerp(tail, travel, (i + 1) / 36);
-      if (toT <= 0 || fromT >= 1) continue;
-
-      const position = (i + 0.5) / 36;
-      const strength = pulseEnvelope(position);
-      const colour = smooth(position);
-      const red = Math.round(lerp(201, 248, colour));
-      const green = Math.round(lerp(37, 219, colour));
-      const blue = Math.round(lerp(123, 234, colour));
-      const from = spineAt(clamp(fromT, 0, 1), geo);
-      const to = spineAt(clamp(toT, 0, 1), geo);
+    for (let index = 0; index < HERO_STRAND_COUNT; index += 1) {
+      const [red, green, blue] = palette[index];
+      const lineWeight = index === 4 ? 2.5 : 1 + ((index * 17) % 4) * 0.26;
 
       ctx.beginPath();
-      ctx.moveTo(from.x, from.y);
-      ctx.lineTo(to.x, to.y);
-      ctx.strokeStyle = `rgba(${red}, ${green}, ${blue}, ${(strength * 0.88).toFixed(3)})`;
-      ctx.lineWidth = 1.8 + strength * 2.2;
-      ctx.shadowColor = `rgba(201, 37, 123, ${(strength * 0.48).toFixed(3)})`;
-      ctx.shadowBlur = 4 + strength * 10;
+      for (let segment = 0; segment <= HERO_SEGMENTS; segment += 1) {
+        const point = at(segment / HERO_SEGMENTS, index);
+        if (segment) ctx.lineTo(point.x, point.y);
+        else ctx.moveTo(point.x, point.y);
+      }
+      const ink = ctx.createLinearGradient(0, height, width, 0);
+      ink.addColorStop(0, `rgba(${red}, ${green}, ${blue}, 0.54)`);
+      ink.addColorStop(0.5, `rgba(${red}, ${green}, ${blue}, 0.76)`);
+      ink.addColorStop(0.68, `rgba(${red}, ${green}, ${blue}, 0.94)`);
+      ink.addColorStop(1, `rgba(${red}, ${green}, ${blue}, ${index === 4 ? 0.94 : 0.28})`);
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = lineWeight;
       ctx.stroke();
+
+      // Two long tapered waves travel through every strand. Short graduated
+      // segments make the pulse dissolve at both ends instead of reading as a
+      // rectangular bar of light.
+      for (let pulseIndex = 0; pulseIndex < 2; pulseIndex += 1) {
+        const head = ((time * (0.085 + index * 0.0018) + index * 0.105 + pulseIndex * 0.53) % 1.18) - 0.04;
+        const pulseLength = 0.18;
+        const tail = head - pulseLength;
+
+        ctx.save();
+        ctx.lineCap = "butt";
+        for (let part = 0; part < 26; part += 1) {
+          const fromT = lerp(tail, head, part / 26);
+          const toT = lerp(tail, head, (part + 1) / 26);
+          if (toT <= 0 || fromT >= 1) continue;
+
+          const position = (part + 0.5) / 26;
+          const strength = pulseEnvelope(position);
+          const from = at(clamp(fromT, 0, 1), index);
+          const to = at(clamp(toT, 0, 1), index);
+          const colourShift = smooth(position);
+          const pulseRed = Math.round(lerp(201, 243, colourShift));
+          const pulseGreen = Math.round(lerp(37, 185, colourShift));
+          const pulseBlue = Math.round(lerp(123, 216, colourShift));
+
+          ctx.beginPath();
+          ctx.moveTo(from.x, from.y);
+          ctx.lineTo(to.x, to.y);
+          ctx.strokeStyle = `rgba(${pulseRed}, ${pulseGreen}, ${pulseBlue}, ${(strength * 0.9).toFixed(3)})`;
+          ctx.lineWidth = lineWeight + strength * 2.4;
+          ctx.shadowColor = `rgba(201, 37, 123, ${(strength * 0.28).toFixed(3)})`;
+          ctx.shadowBlur = strength * 8;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
     }
-    ctx.restore();
 
-    // The merge point itself.
-    const halo = 26 + Math.sin(time * 1.6) * 5;
-    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, halo);
-    glow.addColorStop(0, "rgba(248, 219, 234, 0.76)");
-    glow.addColorStop(0.35, "rgba(201, 37, 123, 0.4)");
-    glow.addColorStop(1, "rgba(201, 37, 123, 0)");
+    const focus = at(0.62, 4);
+    const haloRadius = 18 + Math.sin(time * 1.15) * 2.5;
+    const halo = ctx.createRadialGradient(focus.x, focus.y, 0, focus.x, focus.y, haloRadius);
+    halo.addColorStop(0, "rgba(243, 185, 216, 0.56)");
+    halo.addColorStop(0.35, "rgba(201, 37, 123, 0.2)");
+    halo.addColorStop(1, "rgba(201, 37, 123, 0)");
     ctx.beginPath();
-    ctx.arc(cx, cy, halo, 0, Math.PI * 2);
-    ctx.fillStyle = glow;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-    ctx.fillStyle = "#f8dbea";
+    ctx.arc(focus.x, focus.y, haloRadius, 0, Math.PI * 2);
+    ctx.fillStyle = halo;
     ctx.fill();
   });
 }

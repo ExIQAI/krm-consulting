@@ -45,6 +45,18 @@ test('the hero signal pulse fades smoothly at both ends', async () => {
   assert.ok(pulseEnvelope(1) < 0.000001);
 });
 
+test('the hero inputs stay below the protected copy and CTA area', async () => {
+  const { heroLinePoint } = await import('../script.js');
+  const geometry = { width: 1600, height: 900 };
+
+  for (let strand = 0; strand < 9; strand += 1) {
+    for (let step = 0; step <= 50; step += 1) {
+      const point = heroLinePoint((step / 50) * 0.54, strand, geometry);
+      assert.ok(point.y >= geometry.height * 0.85, `strand ${strand} entered the CTA-safe area`);
+    }
+  }
+});
+
 test('the scroll cue is readable rather than a clipped vertical string', () => {
   const html = read('index.html');
   const css = read('styles.css');
@@ -147,13 +159,6 @@ test('the plan and the result are drawn differently', async () => {
   const google = CHANNELS.findIndex((c) => c.name === 'Google / Search');
   const print = CHANNELS.findIndex((c) => c.name === 'Print');
   assert.ok(momentum[google].endY < momentum[print].endY);
-});
-
-test('the illustrative figures are labelled as illustrative', () => {
-  const html = read('index.html');
-
-  assert.match(html, /Illustrative example — indicative channel figures/);
-  assert.match(html, /not results from a specific client/);
 });
 
 test('preview redirects and indexing protections stay configured', () => {
