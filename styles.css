@@ -582,7 +582,7 @@ button {
   flex-direction: column;
   justify-content: center;
   padding: 14svh 0;
-  opacity: 0.32;
+  opacity: 0.72;
   transition:
     opacity 500ms ease,
     transform 650ms var(--ease);
