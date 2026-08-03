@@ -1084,6 +1084,28 @@ function setupDemoForm() {
   });
 }
 
+/**
+ * Turns chapter snapping on only while the hero and the story are on screen.
+ * The boundary is chosen so it flips exactly at a snap position — when the
+ * story first covers the viewport the first chapter is already centred — which
+ * means enabling it can never yank the page.
+ */
+function setupChapterSnap() {
+  const story = $(".story");
+  if (!story || reducedMotion()) return;
+
+  const root = document.documentElement;
+
+  const update = () => {
+    const box = story.getBoundingClientRect();
+    root.toggleAttribute("data-chapter-snap", box.bottom >= window.innerHeight - 1);
+  };
+
+  update();
+  window.addEventListener("scroll", update, { passive: true });
+  window.addEventListener("resize", update, { passive: true });
+}
+
 function setupHeader() {
   const header = $(".site-header");
   if (!header) return;
@@ -1097,6 +1119,7 @@ if (typeof document !== "undefined") {
   setupHeader();
   setupHeroArt();
   setupScrollStory();
+  setupChapterSnap();
   setupReveals();
   setupTestimonials();
   setupDemoForm();

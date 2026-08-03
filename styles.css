@@ -28,11 +28,14 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: calc(var(--header-height) + 24px);
-  /* Proximity rather than mandatory: the story chapters click into place so a
-     scroll never rests halfway between two of them, while the tall sections
-     below stay freely scrollable. */
-  scroll-snap-type: y proximity;
   background: var(--paper);
+}
+
+/* Snapping is switched on only while the hero and the story are on screen, so
+   one scroll always advances a whole chapter there, and the tall sections
+   further down are never made unreachable by a mandatory snap. */
+html[data-chapter-snap] {
+  scroll-snap-type: y mandatory;
 }
 
 body {
@@ -114,7 +117,6 @@ button {
 .section {
   position: relative;
   padding: clamp(88px, 12vw, 168px) 0;
-  scroll-snap-align: start;
 }
 
 .section--dark {
@@ -367,6 +369,7 @@ button {
   isolation: isolate;
   display: grid;
   min-height: 100svh;
+  scroll-snap-align: start;
   align-items: start;
   overflow: hidden;
   padding: max(calc(var(--header-height) + 48px), 11svh) 0 clamp(64px, 8svh, 110px);
