@@ -1091,31 +1091,35 @@ function setupDemoForm() {
  * means enabling it can never yank the page.
  */
 function setupChapterSnap() {
-  const story = $(".story");
-  if (!story || reducedMotion()) return;
+  const steps = $$(".story-step[data-chapter]");
+  const last = steps[steps.length - 1];
+  if (!last || reducedMotion()) return;
 
   const root = document.documentElement;
-  let bottom = 0;
-  let queued = false;
+  // Chapters are a full viewport tall only on the wide layout. On a phone they
+  // are short blocks under a pinned panel, where several would sit inside the
+  // snapport at once and snapping fights the scroll instead of guiding it.
+  const wide = window.matchMedia("(min-width: 821px)");
 
-  // Measured off the scroll event but read on a frame, so scrolling never has
-  // to wait for a synchronous layout.
-  const measure = () => {
-    queued = false;
-    bottom = window.scrollY + story.getBoundingClientRect().bottom;
-    apply();
-  };
+  let release = 0;
+  let queued = false;
 
   const apply = () => {
     root.toggleAttribute(
       "data-chapter-snap",
-      bottom - window.scrollY >= window.innerHeight - 1,
+      wide.matches && window.scrollY <= release,
     );
   };
 
-  const onScroll = () => {
-    // The story's position in the document only moves when the page reflows,
-    // so scrolling just re-tests the cached value.
+  // Measured on a frame rather than during the scroll event, so scrolling never
+  // has to wait for a synchronous layout.
+  const measure = () => {
+    queued = false;
+    const box = last.getBoundingClientRect();
+    // Snapping is released as soon as the final chapter has been reached.
+    // Leaving it on past the last snap position drags the sections below back
+    // up into the story, which reads as the page refusing to scroll.
+    release = window.scrollY + box.top + box.height / 2 - window.innerHeight / 2 + 8;
     apply();
   };
 
@@ -1126,9 +1130,10 @@ function setupChapterSnap() {
   };
 
   measure();
-  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("scroll", apply, { passive: true });
   window.addEventListener("resize", remeasure, { passive: true });
-  if ("ResizeObserver" in window) new ResizeObserver(remeasure).observe(story);
+  wide.addEventListener?.("change", remeasure);
+  if ("ResizeObserver" in window) new ResizeObserver(remeasure).observe(last);
 }
 
 function setupHeader() {
