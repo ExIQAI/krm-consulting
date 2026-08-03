@@ -1095,15 +1095,40 @@ function setupChapterSnap() {
   if (!story || reducedMotion()) return;
 
   const root = document.documentElement;
+  let bottom = 0;
+  let queued = false;
 
-  const update = () => {
-    const box = story.getBoundingClientRect();
-    root.toggleAttribute("data-chapter-snap", box.bottom >= window.innerHeight - 1);
+  // Measured off the scroll event but read on a frame, so scrolling never has
+  // to wait for a synchronous layout.
+  const measure = () => {
+    queued = false;
+    bottom = window.scrollY + story.getBoundingClientRect().bottom;
+    apply();
   };
 
-  update();
-  window.addEventListener("scroll", update, { passive: true });
-  window.addEventListener("resize", update, { passive: true });
+  const apply = () => {
+    root.toggleAttribute(
+      "data-chapter-snap",
+      bottom - window.scrollY >= window.innerHeight - 1,
+    );
+  };
+
+  const onScroll = () => {
+    // The story's position in the document only moves when the page reflows,
+    // so scrolling just re-tests the cached value.
+    apply();
+  };
+
+  const remeasure = () => {
+    if (queued) return;
+    queued = true;
+    window.requestAnimationFrame(measure);
+  };
+
+  measure();
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", remeasure, { passive: true });
+  if ("ResizeObserver" in window) new ResizeObserver(remeasure).observe(story);
 }
 
 function setupHeader() {

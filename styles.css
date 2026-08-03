@@ -27,14 +27,17 @@
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: calc(var(--header-height) + 24px);
   background: var(--paper);
 }
 
 /* Snapping is switched on only while the hero and the story are on screen, so
    one scroll always advances a whole chapter there, and the tall sections
-   further down are never made unreachable by a mandatory snap. */
+   further down are never made unreachable by a mandatory snap.
+   scroll-behavior is dropped while it is on: a smooth-scroll animation and the
+   snap engine retarget each other and the result stutters. Snapping animates
+   on its own, so the movement stays smooth without it. */
 html[data-chapter-snap] {
+  scroll-behavior: auto;
   scroll-snap-type: y mandatory;
 }
 
@@ -112,6 +115,14 @@ button {
 .container {
   width: var(--container);
   margin-inline: auto;
+}
+
+/* The header offset for anchor links lives on the targets rather than as
+   scroll-padding on the root. Root padding shrinks the snapport, and a snap
+   area taller than the snapport is one Chrome refuses to snap to at all. */
+.section,
+.story {
+  scroll-margin-top: calc(var(--header-height) + 24px);
 }
 
 .section {
