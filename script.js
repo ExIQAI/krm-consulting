@@ -151,7 +151,15 @@ function createStage(canvas, draw) {
     ).observe(canvas);
   }
 
-  window.addEventListener("resize", paint, { passive: true });
+  // Repaint whenever the element's box changes. This also covers the first
+  // paint landing before layout has settled: with reduced motion there is no
+  // render loop to correct a canvas that was sized while it had no width.
+  if ("ResizeObserver" in window) {
+    new ResizeObserver(paint).observe(canvas);
+  } else {
+    window.addEventListener("resize", paint, { passive: true });
+  }
+
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) stop();
     else start();
