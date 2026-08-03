@@ -29,6 +29,10 @@ test('the richer visual treatment keeps the old boxed signal label out', () => {
   const html = read('index.html');
 
   assert.match(html, /class="hero-art"/);
+  assert.equal((html.match(/class="hero-art__ribbon"/g) || []).length, 1);
+  assert.equal((html.match(/class="hero-art__signal-run"/g) || []).length, 1);
+  assert.doesNotMatch(html, /hero-art__orbit|hero-art__river/);
+  assert.match(html, /<strong class="proof-card__channel">Channel 9<\/strong>/);
   assert.equal((html.match(/signal-line signal-line--/g) || []).length, 5);
   assert.doesNotMatch(html, /data-signal-label/);
   assert.equal((html.match(/team-card__tag/g) || []).length, 2);
