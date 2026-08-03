@@ -67,14 +67,12 @@ function setupNavigation() {
 function setupScrollStory() {
   const steps = $$(".story-step[data-chapter]");
   const signal = $(".signal-visual");
-  const label = $("[data-signal-label]");
   if (!steps.length) return;
 
   const activate = (step) => {
     steps.forEach((item) => item.toggleAttribute("data-active", item === step));
     const chapter = step.dataset.chapter;
     if (signal) signal.dataset.state = chapter;
-    if (label) label.textContent = chapter;
   };
 
   activate(steps[0]);

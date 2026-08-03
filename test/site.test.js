@@ -25,6 +25,15 @@ test('the testimonial demo uses only the three approved videos', () => {
   assert.doesNotMatch(`${html}\n${script}`, /[?&]autoplay=1|<(?:video|iframe)\b[^>]*\bautoplay\b/i);
 });
 
+test('the richer visual treatment keeps the old boxed signal label out', () => {
+  const html = read('index.html');
+
+  assert.match(html, /class="hero-art"/);
+  assert.equal((html.match(/signal-line signal-line--/g) || []).length, 5);
+  assert.doesNotMatch(html, /data-signal-label/);
+  assert.equal((html.match(/team-card__tag/g) || []).length, 2);
+});
+
 test('preview redirects and indexing protections stay configured', () => {
   const config = JSON.parse(read('vercel.json'));
   const redirects = new Map(config.redirects.map(({ source, destination }) => [source, destination]));
