@@ -177,10 +177,6 @@ function createStage(canvas, draw, { maxRatio = 2 } = {}) {
  * Hero artwork — gravity stars inside a slow field of translucent colour.
  * ------------------------------------------------------------------------- */
 
-const HERO_MIN_INK = 0.1;
-const HERO_CEIL_COPY = 0.03;
-const HERO_CEIL_CLEAR = 0.34;
-const HERO_MASK_PAD = 24;
 const HERO_STAR_COLOURS = Object.freeze([
   "75,38,62",
   "115,52,91",
@@ -189,39 +185,26 @@ const HERO_STAR_COLOURS = Object.freeze([
   "228,206,221",
 ]);
 const HERO_BUBBLES = Object.freeze([
-  { x: 0.86, y: 0.23, radius: 0.52, colour: "228,206,221", alpha: 0.42, phase: 0.2, speed: 0.12, depth: 0.8 },
-  { x: 0.95, y: 0.76, radius: 0.58, colour: "75,38,62", alpha: 0.16, phase: 1.7, speed: 0.08, depth: 1.1 },
-  { x: 0.67, y: 0.88, radius: 0.4, colour: "201,37,123", alpha: 0.14, phase: 3.4, speed: 0.1, depth: 0.65 },
-  { x: 0.58, y: 0.08, radius: 0.34, colour: "244,218,233", alpha: 0.24, phase: 4.8, speed: 0.07, depth: 0.45 },
-  { x: 1.08, y: 0.34, radius: 0.38, colour: "133,74,112", alpha: 0.16, phase: 5.7, speed: 0.09, depth: 0.9 },
+  { x: 0.84, y: 0.2, radius: 0.58, colour: "228,206,221", alpha: 0.62, phase: 0.2, speed: 0.12, depth: 0.8 },
+  { x: 0.94, y: 0.78, radius: 0.62, colour: "75,38,62", alpha: 0.24, phase: 1.7, speed: 0.08, depth: 1.1 },
+  { x: 0.64, y: 0.9, radius: 0.46, colour: "201,37,123", alpha: 0.22, phase: 3.4, speed: 0.1, depth: 0.65 },
+  { x: 0.54, y: 0.06, radius: 0.4, colour: "244,218,233", alpha: 0.36, phase: 4.8, speed: 0.07, depth: 0.45 },
+  { x: 1.06, y: 0.32, radius: 0.44, colour: "133,74,112", alpha: 0.2, phase: 5.7, speed: 0.09, depth: 0.9 },
+  { x: 0.12, y: 0.42, radius: 0.38, colour: "228,206,221", alpha: 0.22, phase: 2.6, speed: 0.08, depth: 0.35 },
 ]);
 
-export function heroMaskValue(x, y, rects, feather) {
-  let nearest = Infinity;
-  for (const rect of rects) {
-    const dx = Math.max(rect.x0 - x, 0, x - rect.x1);
-    const dy = Math.max(rect.y0 - y, 0, y - rect.y1);
-    nearest = Math.min(nearest, dx * dx + dy * dy);
-  }
-  if (nearest === Infinity) return 0;
-  return 1 - smooth(clamp(Math.sqrt(nearest) / feather, 0, 1));
-}
-
-export function heroInkAlpha(raw, mask) {
-  const protectedAmount = clamp(mask, 0, 1);
-  const scale = HERO_MIN_INK + (1 - HERO_MIN_INK) * (1 - protectedAmount);
-  const ceiling =
-    HERO_CEIL_COPY + (HERO_CEIL_CLEAR - HERO_CEIL_COPY) * (1 - protectedAmount);
-  return Math.min(Math.max(raw, 0) * scale, ceiling);
-}
-
-export function heroGravity(dx, dy, influence = 210, strength = 62) {
+export function heroOrbitForce(dx, dy, influence = 360, strength = 130, spin = 105) {
   const distance = Math.hypot(dx, dy);
   if (!distance || distance >= influence) return { x: 0, y: 0, weight: 0 };
   const weight = smooth(1 - distance / influence);
+  const orbitRadius = influence * 0.3;
+  const radial = clamp((distance - orbitRadius) / orbitRadius, -1, 1) * strength * weight;
+  const tangent = spin * weight;
+  const nx = dx / distance;
+  const ny = dy / distance;
   return {
-    x: (dx / distance) * strength * weight,
-    y: (dy / distance) * strength * weight,
+    x: nx * radial - ny * tangent,
+    y: ny * radial + nx * tangent,
     weight,
   };
 }
@@ -237,27 +220,6 @@ function mulberry32(seed) {
   };
 }
 
-function heroCopyRects(hero) {
-  const origin = hero.getBoundingClientRect();
-  const elements = [
-    hero.querySelector(".eyebrow"),
-    hero.querySelector("h1"),
-    hero.querySelector(".hero__footer p"),
-    ...hero.querySelectorAll(".hero-actions .button"),
-    hero.querySelector(".scroll-cue"),
-  ].filter(Boolean);
-
-  return elements.map((element) => {
-    const box = element.getBoundingClientRect();
-    return {
-      x0: box.left - origin.left - HERO_MASK_PAD,
-      y0: box.top - origin.top - HERO_MASK_PAD,
-      x1: box.right - origin.left + HERO_MASK_PAD,
-      y1: box.bottom - origin.top + HERO_MASK_PAD,
-    };
-  });
-}
-
 function setupHeroArt() {
   const canvas = $("[data-hero-art]");
   const hero = canvas?.closest(".hero");
@@ -268,48 +230,52 @@ function setupHeroArt() {
   const pointer = { x: 0, y: 0, active: 0 };
   const wanted = { x: 0, y: 0, active: 0 };
   let stars = [];
-  let copyRects = [];
   let lastWidth = 0;
   let lastHeight = 0;
 
   const rebuild = (width, height) => {
-    const count = width < 620 ? 48 : width < 1100 ? 68 : 84;
+    const count = width < 620 ? 90 : width < 1100 ? 125 : 170;
     stars = Array.from({ length: count }, () => {
       const angle = random() * TAU;
-      const speed = 5 + random() * 12;
+      const speed = 8 + random() * 16;
+      const vx = Math.cos(angle) * speed;
+      const vy = Math.sin(angle) * speed;
       return {
         x: random() * width,
         y: random() * height,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        baseVx: Math.cos(angle) * speed,
-        baseVy: Math.sin(angle) * speed,
-        radius: 0.7 + random() * 1.9,
-        opacity: 0.32 + random() * 0.48,
+        vx,
+        vy,
+        baseVx: vx,
+        baseVy: vy,
+        radius: 1 + random() * 2.2,
+        opacity: 0.5 + random() * 0.45,
         colour: HERO_STAR_COLOURS[Math.floor(random() * HERO_STAR_COLOURS.length)],
         phase: random() * TAU,
       };
     });
-    copyRects = heroCopyRects(hero);
     lastWidth = width;
     lastHeight = height;
   };
 
   const readPointer = (event) => {
     const box = hero.getBoundingClientRect();
-    wanted.x = event.clientX - box.left;
-    wanted.y = event.clientY - box.top;
-    wanted.active = 1;
+    const x = event.clientX - box.left;
+    const y = event.clientY - box.top;
+    wanted.active = Number(x >= 0 && y >= 0 && x <= box.width && y <= box.height);
+    if (wanted.active) {
+      wanted.x = x;
+      wanted.y = y;
+    }
   };
 
   if (!still && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
-    hero.addEventListener("pointermove", readPointer, { passive: true });
-    hero.addEventListener("pointerleave", () => {
+    document.addEventListener("pointermove", readPointer, { passive: true });
+    window.addEventListener("blur", () => {
       wanted.active = 0;
     });
   }
 
-  const stageRef = createStage(
+  createStage(
     canvas,
     (ctx, stage, delta) => {
       const { width, height, time } = stage;
@@ -324,9 +290,9 @@ function setupHeroArt() {
         const driftX = Math.sin(time * bubble.speed + bubble.phase) * width * 0.045;
         const driftY = Math.cos(time * bubble.speed * 0.82 + bubble.phase) * height * 0.055;
         const parallaxX =
-          pointer.active * (pointer.x / width - 0.5) * width * 0.055 * bubble.depth;
+          pointer.active * (pointer.x / width - 0.5) * width * 0.08 * bubble.depth;
         const parallaxY =
-          pointer.active * (pointer.y / height - 0.5) * height * 0.045 * bubble.depth;
+          pointer.active * (pointer.y / height - 0.5) * height * 0.07 * bubble.depth;
         const x = bubble.x * width + driftX + parallaxX;
         const y = bubble.y * height + driftY + parallaxY;
         const radius = Math.min(width, height) * bubble.radius;
@@ -353,11 +319,11 @@ function setupHeroArt() {
         );
         gradient.addColorStop(
           0,
-          "rgba(201,37,123," + (0.11 * pointer.active).toFixed(3) + ")",
+          "rgba(201,37,123," + (0.22 * pointer.active).toFixed(3) + ")",
         );
         gradient.addColorStop(
           0.48,
-          "rgba(228,206,221," + (0.07 * pointer.active).toFixed(3) + ")",
+          "rgba(228,206,221," + (0.14 * pointer.active).toFixed(3) + ")",
         );
         gradient.addColorStop(1, "rgba(228,206,221,0)");
         ctx.fillStyle = gradient;
@@ -365,20 +331,20 @@ function setupHeroArt() {
       }
 
       for (const star of stars) {
-        let gravity = { x: 0, y: 0, weight: 0 };
+        let orbit = { x: 0, y: 0, weight: 0 };
         if (pointer.active > 0.01) {
-          gravity = heroGravity(pointer.x - star.x, pointer.y - star.y);
-          star.vx += gravity.x * delta * pointer.active;
-          star.vy += gravity.y * delta * pointer.active;
+          orbit = heroOrbitForce(pointer.x - star.x, pointer.y - star.y);
+          star.vx += orbit.x * delta * pointer.active;
+          star.vy += orbit.y * delta * pointer.active;
         }
 
-        const returnStrength = 0.24 * delta;
+        const returnStrength = (pointer.active > 0.05 ? 0.08 : 0.4) * delta;
         star.vx += (star.baseVx - star.vx) * returnStrength;
         star.vy += (star.baseVy - star.vy) * returnStrength;
         const speed = Math.hypot(star.vx, star.vy);
-        if (speed > 58) {
-          star.vx = (star.vx / speed) * 58;
-          star.vy = (star.vy / speed) * 58;
+        if (speed > 115) {
+          star.vx = (star.vx / speed) * 115;
+          star.vy = (star.vy / speed) * 115;
         }
 
         if (!still) {
@@ -391,27 +357,27 @@ function setupHeroArt() {
         if (star.y < -margin) star.y = height + margin;
         if (star.y > height + margin) star.y = -margin;
 
-        const twinkle = still ? 0.9 : 0.72 + 0.28 * Math.sin(time * 0.8 + star.phase);
-        const mask = heroMaskValue(
-          star.x,
-          star.y,
-          copyRects,
-          clamp(width * 0.045, 34, 74),
-        );
-        const alpha = heroInkAlpha(
-          star.opacity * twinkle * (1 + gravity.weight * 0.85),
-          mask,
-        );
-        const radius = star.radius * (1 + gravity.weight * 0.55);
+        const twinkle = still ? 0.92 : 0.78 + 0.22 * Math.sin(time * 1.05 + star.phase);
+        const alpha = clamp(star.opacity * twinkle * (1 + orbit.weight * 0.24), 0, 1);
+        const radius = star.radius * (1 + orbit.weight * 0.5);
 
-        if (gravity.weight > 0.12) {
+        if (!still && speed > 20) {
+          ctx.beginPath();
+          ctx.moveTo(star.x - star.vx * 0.085, star.y - star.vy * 0.085);
+          ctx.lineTo(star.x, star.y);
+          ctx.strokeStyle = "rgba(" + star.colour + "," + (alpha * 0.24).toFixed(4) + ")";
+          ctx.lineWidth = Math.max(0.7, radius * 0.6);
+          ctx.stroke();
+        }
+
+        if (orbit.weight > 0.08) {
           ctx.beginPath();
           ctx.arc(star.x, star.y, radius * 3.4, 0, TAU);
           ctx.fillStyle =
             "rgba(" +
             star.colour +
             "," +
-            (alpha * gravity.weight * 0.14).toFixed(4) +
+            (alpha * orbit.weight * 0.18).toFixed(4) +
             ")";
           ctx.fill();
         }
@@ -424,18 +390,6 @@ function setupHeroArt() {
     },
     { maxRatio: 1.5 },
   );
-
-  if (!stageRef) return;
-
-  const refreshMask = () => {
-    copyRects = heroCopyRects(hero);
-    stageRef.paint();
-  };
-  if ("ResizeObserver" in window) {
-    const inner = hero.querySelector(".hero__inner");
-    if (inner) new ResizeObserver(refreshMask).observe(inner);
-  }
-  document.fonts?.ready?.then(refreshMask);
 }
 
 function setupNavigation() {

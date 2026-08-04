@@ -379,14 +379,7 @@ button {
 }
 
 .hero::before {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  background:
-    radial-gradient(ellipse at 28% 45%, rgba(255, 250, 246, 0.76) 0 24%, rgba(255, 250, 246, 0.3) 50%, transparent 70%),
-    linear-gradient(90deg, rgba(255, 250, 246, 0.5) 0 34%, rgba(255, 250, 246, 0.14) 56%, transparent 72%);
-  content: "";
-  pointer-events: none;
+  content: none;
 }
 
 .hero::after {
@@ -1625,19 +1618,7 @@ button {
   }
 
   .hero-art__canvas {
-    opacity: 0.9;
-  }
-
-  /* Here the copy spans the full width, so the veil runs down the page rather
-     than across it: heavy over the stacked headline and buttons, clearing for
-     the open strip at the bottom where the focus sits. */
-  .hero::before {
-    background: linear-gradient(
-      180deg,
-      rgba(255, 250, 246, 0.55) 0 58%,
-      rgba(255, 250, 246, 0.22) 76%,
-      transparent 90%
-    );
+    opacity: 1;
   }
 
   .hero-index,
@@ -1802,10 +1783,6 @@ button {
   .hero h1 {
     max-width: 100%;
     font-size: clamp(3.5rem, 16vw, 5.5rem);
-  }
-
-  .hero::before {
-    background: linear-gradient(90deg, rgba(255, 250, 246, 0.98) 0 68%, rgba(255, 250, 246, 0.68) 88%, transparent);
   }
 
   .hero-actions {
