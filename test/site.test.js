@@ -37,24 +37,125 @@ test('the hero and story artwork are canvas driven, with the old vectors gone', 
   assert.equal((html.match(/team-card__tag/g) || []).length, 2);
 });
 
-test('the hero signal pulse fades smoothly at both ends', async () => {
-  const { pulseEnvelope } = await import('../script.js');
+test('the hero mask marks where the copy is and fades out cleanly', async () => {
+  const { heroMaskValue } = await import('../script.js');
+  const rects = [{ x0: 100, y0: 150, x1: 900, y1: 420 }];
+  const at = (x, y) => heroMaskValue(x, y, rects, 84);
 
-  assert.equal(pulseEnvelope(0), 0);
-  assert.ok(pulseEnvelope(0.5) > 0.99);
-  assert.ok(pulseEnvelope(1) < 0.000001);
+  assert.equal(at(500, 300), 1, 'fully masked inside a copy rect');
+  assert.equal(at(500, 420), 1, 'still masked on the boundary');
+  assert.equal(at(500, 420 + 84), 0, 'clear once past the feather');
+  assert.equal(at(2000, 2000), 0, 'clear far away');
+  assert.equal(heroMaskValue(0, 0, [], 84), 0, 'no copy means no mask');
+
+  // Monotonic and continuous as it recedes — the falloff drives the bow around
+  // the glyphs, so a discontinuity here would show as a kink in the artwork.
+  let previous = 1;
+  for (let d = 0; d <= 84; d += 4) {
+    const value = at(500, 420 + d);
+    assert.ok(value <= previous + 1e-9, `mask must not rise at ${d}px`);
+    assert.ok(value >= 0 && value <= 1);
+    previous = value;
+  }
 });
 
-test('the hero inputs stay below the protected copy and CTA area', async () => {
-  const { heroLinePoint } = await import('../script.js');
-  const geometry = { width: 1600, height: 900 };
+test('hero ink over the copy is bounded no matter what is asked for', async () => {
+  const { heroInkAlpha } = await import('../script.js');
 
-  for (let strand = 0; strand < 9; strand += 1) {
-    for (let step = 0; step <= 50; step += 1) {
-      const point = heroLinePoint((step / 50) * 0.54, strand, geometry);
-      assert.ok(point.y >= geometry.height * 0.85, `strand ${strand} entered the CTA-safe area`);
-    }
+  // The invariant: this is the last operation on every alpha, so an absurd
+  // upstream gain must still land under the ceiling.
+  for (const raw of [0.001, 0.05, 0.2, 1, 40]) {
+    assert.ok(heroInkAlpha(raw, 1) <= 0.03 + 1e-9, `capped over copy for ${raw}`);
+    assert.ok(heroInkAlpha(raw, 0) <= 0.35, `clear space stays sane for ${raw}`);
   }
+  // Clear space is allowed to carry the artwork; copy is not. Keep them far
+  // apart so turning the ink up never quietly darkens the text.
+  assert.ok(heroInkAlpha(999, 0) > heroInkAlpha(999, 1) * 5);
+
+  // Faint ink is scaled, not clamped, so the ghost behind the copy is real.
+  assert.ok(heroInkAlpha(0.02, 1) < heroInkAlpha(0.02, 0));
+  assert.ok(heroInkAlpha(0.02, 1) > 0);
+  assert.equal(heroInkAlpha(-5, 0), 0, 'negative alpha never inverts');
+
+  // The worst single pixel of artwork behind the body copy must not meaningfully
+  // erode contrast. --muted on --paper is only 5.34:1 to begin with, so the
+  // bar is "stays comfortably AA and barely moves", not "reaches AAA".
+  const luminance = ([r, g, b]) => {
+    const channel = (v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  };
+  const paper = [255, 250, 246];
+  const ink = [126, 108, 124];
+  const muted = luminance([111, 102, 108]);
+  const ratio = (bg) => (luminance(bg) + 0.05) / (muted + 0.05);
+
+  const worst = heroInkAlpha(999, 1);
+  const baseline = ratio(paper);
+  const composite = (alpha) => paper.map((c, i) => c * (1 - alpha) + ink[i] * alpha);
+
+  assert.ok(worst <= 0.03);
+  const single = ratio(composite(worst));
+  assert.ok(single >= 4.5, `body copy stays WCAG AA, got ${single.toFixed(2)}`);
+  assert.ok(
+    single > baseline * 0.95,
+    `one stroke erodes contrast under 5% (${baseline.toFixed(2)} -> ${single.toFixed(2)})`
+  );
+
+  // The ceiling bounds a single stroke, not what happens where several cross
+  // the same pixel. Measured peak accumulation over live glyphs is ~0.075, so
+  // check the harsher case of four worst-case strokes stacking.
+  const stacked = 1 - (1 - worst) ** 4;
+  assert.ok(stacked > 0.075, 'the modelled stack is worse than what was measured');
+  assert.ok(
+    ratio(composite(stacked)) >= 4.5,
+    `stacked strokes still clear AA, got ${ratio(composite(stacked)).toFixed(2)}`
+  );
+});
+
+test('the hero optics respond to the pointer the way the brief asks', async () => {
+  const { heroSharp, heroFocalLength, heroTurbulence, heroAxisPoint } =
+    await import('../script.js');
+
+  // Focus is found at the centre and lost towards either edge, so sweeping
+  // the mouse across is a live A/B between blurred and sharp.
+  assert.equal(heroSharp(0), 1);
+  assert.equal(heroSharp(-1), 0);
+  assert.equal(heroSharp(1), 0);
+  assert.ok(heroSharp(0.35) > heroSharp(0.75));
+
+  // Horizontal position really moves the focal plane.
+  const sensor = 432;
+  assert.equal(heroFocalLength(0, sensor), sensor);
+  assert.ok(heroFocalLength(-1, sensor) < sensor);
+  assert.ok(heroFocalLength(1, sensor) > sensor);
+
+  // Turbulence is the many-inputs beat: full upstream, gone by the focus.
+  assert.ok(heroTurbulence(-4000, sensor) > 0.99);
+  assert.ok(heroTurbulence(sensor, sensor) < 0.07);
+  assert.ok(heroTurbulence(-4000, sensor) > heroTurbulence(sensor, sensor));
+
+  // The axis frame is a pure rotation about the lens point.
+  const frame = { xL: 700, yA: 600, cos: 1, sin: 0 };
+  assert.deepEqual(heroAxisPoint(0, 0, frame), { x: 700, y: 600 });
+  assert.deepEqual(heroAxisPoint(100, 0, frame), { x: 800, y: 600 });
+  assert.deepEqual(heroAxisPoint(0, 50, frame), { x: 700, y: 650 });
+});
+
+test('the hero avoids the canvas operations that made the old one costly', () => {
+  const script = read('script.js');
+
+  // shadowBlur forces an offscreen blur per stroke and was the single most
+  // expensive call in the previous hero.
+  assert.doesNotMatch(script, /shadowBlur/);
+  // No compositing tricks: a persistent trail buffer faded with destination-out
+  // never reaches zero, because 8-bit alpha rounding leaves it stuck around
+  // 4-12/255, which would build a permanent film on the warm paper ground.
+  assert.doesNotMatch(script, /globalCompositeOperation/);
+  // getImageData is a GPU readback stall; ctx.filter is unsupported on older Safari.
+  assert.doesNotMatch(script, /getImageData|ctx\.filter/);
 });
 
 test('the scroll cue is readable rather than a clipped vertical string', () => {

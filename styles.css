@@ -383,8 +383,13 @@ button {
   z-index: 1;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(255, 250, 246, 0.5) 0 70%, rgba(255, 250, 246, 0.12) 82%, transparent 88%),
-    linear-gradient(90deg, rgba(255, 250, 246, 0.28) 0 36%, rgba(255, 250, 246, 0.12) 54%, transparent 72%);
+    /* A light blanket veil. The artwork caps its own ink at 0.03 alpha wherever
+       the copy measurably is, so this no longer has to carry the protection by
+       itself — and at 0.5 it was washing out the entire right-hand side, where
+       there is no copy at all. */
+    linear-gradient(180deg, rgba(255, 250, 246, 0.2) 0 62%, rgba(255, 250, 246, 0.08) 78%, transparent 88%),
+    /* The real protection, aimed at the column the copy actually occupies. */
+    linear-gradient(90deg, rgba(255, 250, 246, 0.42) 0 34%, rgba(255, 250, 246, 0.18) 52%, transparent 68%);
   content: "";
   pointer-events: none;
 }
@@ -1625,11 +1630,19 @@ button {
   }
 
   .hero-art__canvas {
-    opacity: 0.72;
+    opacity: 0.9;
   }
 
+  /* Here the copy spans the full width, so the veil runs down the page rather
+     than across it: heavy over the stacked headline and buttons, clearing for
+     the open strip at the bottom where the focus sits. */
   .hero::before {
-    background: linear-gradient(90deg, rgba(255, 250, 246, 0.98) 0 58%, rgba(255, 250, 246, 0.75) 78%, transparent);
+    background: linear-gradient(
+      180deg,
+      rgba(255, 250, 246, 0.55) 0 58%,
+      rgba(255, 250, 246, 0.22) 76%,
+      transparent 90%
+    );
   }
 
   .hero-index,

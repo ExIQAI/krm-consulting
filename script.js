@@ -72,11 +72,12 @@ export const STORY_STATES = Object.freeze({
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];
 
+const TAU = Math.PI * 2;
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const lerp = (from, to, t) => from + (to - from) * t;
 const smooth = (t) => t * t * (3 - 2 * t);
-export const pulseEnvelope = (position) =>
-  Math.sin(Math.PI * clamp(position, 0, 1)) ** 1.35;
+/** Smoothstep between two arbitrary edges. */
+const ramp = (from, to, x) => smooth(clamp((x - from) / (to - from), 0, 1));
 
 const reducedMotion = () =>
   typeof window.matchMedia === "function" &&
@@ -87,7 +88,7 @@ const reducedMotion = () =>
  * the element is on screen. With reduced motion the loop is replaced by
  * single-shot renders so the artwork still composes, it simply stops moving.
  */
-function createStage(canvas, draw) {
+function createStage(canvas, draw, { maxRatio = 2 } = {}) {
   const ctx = canvas.getContext?.("2d");
   if (!ctx) return null;
 
@@ -99,7 +100,7 @@ function createStage(canvas, draw) {
 
   const resize = () => {
     const rect = canvas.getBoundingClientRect();
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const ratio = Math.min(window.devicePixelRatio || 1, maxRatio);
     stage.width = Math.max(1, Math.round(rect.width));
     stage.height = Math.max(1, Math.round(rect.height));
 
@@ -173,218 +174,692 @@ function createStage(canvas, draw) {
   return { stage, paint };
 }
 
-const HERO_STRAND_COUNT = 9;
-const HERO_SEGMENTS = 72;
+/* ---------------------------------------------------------------------------
+ * Hero artwork — "Focus".
+ *
+ * The hero is an optical bench. Several hundred fine data rays drift in from
+ * the left as a tangled, low-contrast field, pass through an invisible lens
+ * plane, converge into a caustic in the open lower right, and leave as one
+ * clean collimated ribbon. The mouse is the focus ring.
+ *
+ * Two rules make it safe for the artwork to cover the whole hero:
+ *   1. Nothing is ever drawn at the cursor, so no bright spot ever wanders
+ *      across the copy.
+ *   2. Every alpha passes through heroInkAlpha() as its LAST operation, which
+ *      caps ink hard wherever the copy measurably is. No later gain term can
+ *      defeat it.
+ *
+ * There is no persistent trail buffer. Fading one with `destination-out`
+ * never reaches zero — 8-bit alpha rounding leaves it stuck around 4-12/255,
+ * which would slowly build a grey film across a warm paper hero. Tails are
+ * redrawn from closed-form ray positions every frame instead.
+ * ------------------------------------------------------------------------- */
 
+/** Ink is cut to this fraction of full strength directly over copy. */
+const HERO_MIN_INK = 0.1;
 /**
- * One continuous hero line. The incoming section stays in the bottom strip so
- * the artwork cannot run through the headline or calls to action, then every
- * strand converges and rises independently on the right.
+ * Absolute alpha ceilings. Clear space carries the artwork; the copy ceiling is
+ * the legibility invariant and must stay low whatever the clear value becomes.
  */
-export function heroLinePoint(progress, index, geometry, time = 0, pointer = {}) {
-  const t = clamp(progress, 0, 1);
-  const { width, height } = geometry;
-  const phase = index * 0.83;
-  const focusX = width * 0.635;
-  const focusY = height * 0.805;
-  const pointerX = pointer.x || 0;
-  const pointerY = pointer.y || 0;
-  const pointerActive = pointer.active || 0;
+const HERO_CEIL_COPY = 0.03;
+const HERO_CEIL_CLEAR = 0.32;
+/** Quantised alpha bands. Fine granularity where the copy zone lives. */
+const HERO_ALPHA_LEVELS = Object.freeze(
+  Array.from({ length: 10 }, (_, k) => HERO_CEIL_CLEAR * (k / 9) ** 2),
+);
+/** One accent only. Class 0 is also what anything over copy is forced to. */
+const HERO_RGB = Object.freeze(["126,108,124", "96,58,88", "75,38,62", "201,37,123"]);
+const HERO_WIDTH = Object.freeze([0.85, 1.05, 1.35, 1.5]);
+const HERO_MASK_CELL = 12;
+const HERO_MASK_FEATHER = 84;
+const HERO_MASK_PAD = 22;
 
-  if (t <= 0.62) {
-    const u = t / 0.62;
-    const startY = height * (0.885 + (index / (HERO_STRAND_COUNT - 1)) * 0.085);
-    const converge = smooth(clamp((u - 0.82) / 0.18, 0, 1));
-    const wave =
-      Math.sin(u * (6.4 + index * 0.18) + time * (0.42 + index * 0.018) + phase) *
-      height *
-      (0.0035 + (index % 3) * 0.0012) *
-      (1 - smooth(u));
-
-    return {
-      x: lerp(-width * 0.045, focusX, u),
-      y: lerp(startY, focusY, converge) + wave,
-    };
-  }
-
-  const u = (t - 0.62) / 0.38;
-  const oneMinus = 1 - u;
-  const endY = height * (0.025 + index * 0.058);
-  const p1x = width * 0.735;
-  const p1y = focusY - height * (0.018 + index * 0.003);
-  const p2x = width * 0.88;
-  const p2y = height * (0.22 + index * 0.047);
-  const endX = width * 1.06;
-  const x =
-    oneMinus ** 3 * focusX +
-    3 * oneMinus ** 2 * u * p1x +
-    3 * oneMinus * u ** 2 * p2x +
-    u ** 3 * endX;
-  const y =
-    oneMinus ** 3 * focusY +
-    3 * oneMinus ** 2 * u * p1y +
-    3 * oneMinus * u ** 2 * p2y +
-    u ** 3 * endY;
-  const wave =
-    Math.sin(u * 5.4 - time * (0.36 + index * 0.014) + phase) *
-    height *
-    0.0045 *
-    smooth(u);
-  const parallax = smooth(u) * pointerActive;
-
+/** A point on the optical axis frame, in canvas pixels. */
+export function heroAxisPoint(p, q, frame) {
   return {
-    x: x + pointerX * width * 0.012 * parallax,
-    y: y + wave + pointerY * height * 0.028 * parallax,
+    x: frame.xL + p * frame.cos - q * frame.sin,
+    y: frame.yA + p * frame.sin + q * frame.cos,
   };
 }
 
+/** 1 at perfect focus (cursor centred), 0 at either edge of the hero. */
+export const heroSharp = (driveX) => smooth(1 - Math.min(Math.abs(driveX), 1));
+
+/** Focal length, driven by the cursor's horizontal position. */
+export const heroFocalLength = (driveX, sensor) =>
+  sensor * (1 + 0.55 * clamp(driveX, -1, 1));
+
+/** Turbulence: full upstream, gone by the focus. Chaos becoming order. */
+export const heroTurbulence = (p, sensor) => 1 - 0.94 * ramp(-0.15 * sensor, sensor, p);
+
+/** 1 inside a copy rect, 0 once clear of every rect by `feather`. */
+export function heroMaskValue(x, y, rects, feather) {
+  let nearest = Infinity;
+  for (let i = 0; i < rects.length; i += 1) {
+    const rect = rects[i];
+    const dx = Math.max(rect.x0 - x, 0, x - rect.x1);
+    const dy = Math.max(rect.y0 - y, 0, y - rect.y1);
+    const squared = dx * dx + dy * dy;
+    if (squared < nearest) nearest = squared;
+  }
+  if (nearest === Infinity) return 0;
+  return 1 - smooth(clamp(Math.sqrt(nearest) / feather, 0, 1));
+}
+
 /**
- * Hero artwork: multiple strategic inputs travel through a protected lower
- * channel, converge, and resolve into a family of focused rising signals.
+ * The legibility invariant: scale ink down over copy, then clamp it under an
+ * absolute ceiling. This must be the last thing done to any alpha.
  */
+export function heroInkAlpha(raw, mask) {
+  const m = clamp(mask, 0, 1);
+  const scale = HERO_MIN_INK + (1 - HERO_MIN_INK) * (1 - m);
+  const ceiling = HERO_CEIL_COPY + (HERO_CEIL_CLEAR - HERO_CEIL_COPY) * (1 - m);
+  return Math.min(Math.max(raw, 0) * scale, ceiling);
+}
+
+/** Deterministic RNG, so the reduced-motion still frame is identical every load. */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Per-line boxes for text, element boxes for controls. */
+function heroCopyRects(hero) {
+  const lineRects = (selector) => {
+    const element = hero.querySelector(selector);
+    if (!element) return [];
+    const box = element.getBoundingClientRect();
+    let rects = [];
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      rects = [...range.getClientRects()].filter((r) => r.width > 4 && r.height > 4);
+    } catch {
+      rects = [];
+    }
+    // Some engines merge a wrapped, balanced headline into one rect. If the
+    // element is clearly taller than what came back, trust the element box.
+    if (rects.length < 2 && box.height > (rects[0]?.height ?? 0) * 1.6) return [box];
+    return rects.length ? rects : [box];
+  };
+
+  const boxes = [
+    ...lineRects(".eyebrow"),
+    ...lineRects("h1"),
+    ...lineRects(".hero__footer p"),
+    ...[...hero.querySelectorAll(".hero-actions .button")].map((e) => e.getBoundingClientRect()),
+    ...[...hero.querySelectorAll(".scroll-cue")].map((e) => e.getBoundingClientRect()),
+  ];
+
+  const origin = hero.getBoundingClientRect();
+  return boxes.map((box) => ({
+    x0: box.left - origin.left - HERO_MASK_PAD,
+    y0: box.top - origin.top - HERO_MASK_PAD,
+    x1: box.right - origin.left + HERO_MASK_PAD,
+    y1: box.bottom - origin.top + HERO_MASK_PAD,
+  }));
+}
+
 function setupHeroArt() {
   const canvas = $("[data-hero-art]");
-  if (!canvas) return;
+  const hero = canvas?.closest(".hero");
+  if (!canvas || !hero) return;
 
-  const hero = canvas.closest(".hero");
-  const target = { x: 0, y: 0, active: 0 };
-  const pointer = { x: 0, y: 0, active: 0 };
-  const canInteract =
-    !reducedMotion() && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const still = reducedMotion();
+  const rnd = mulberry32(0x4b524d01);
+  const MAX_RAYS = 1100;
+  /** Seconds of travel a streak represents. This is what reads as flow. */
+  const STREAK_SECONDS = 0.35;
 
-  if (canInteract && hero) {
-    hero.addEventListener("pointermove", (event) => {
-      const rect = hero.getBoundingClientRect();
-      target.x = clamp(((event.clientX - rect.left) / rect.width - 0.5) * 2, -1, 1);
-      target.y = clamp(((event.clientY - rect.top) / rect.height - 0.5) * 2, -1, 1);
-      target.active = 1;
-    });
-    hero.addEventListener("pointerleave", () => {
-      target.x = 0;
-      target.y = 0;
-      target.active = 0;
+  // --- ray state, allocated once -----------------------------------------
+  const aperture = new Float32Array(MAX_RAYS);
+  const along = new Float32Array(MAX_RAYS);
+  const speed = new Float32Array(MAX_RAYS);
+  const phaseA = new Float32Array(MAX_RAYS);
+  const phaseB = new Float32Array(MAX_RAYS);
+  const rarity = new Float32Array(MAX_RAYS);
+  const dither = new Float32Array(MAX_RAYS);
+
+  const seedRay = (i, spread) => {
+    aperture[i] = 2 * rnd() - 1;
+    along[i] = spread ? rnd() : 0;
+    speed[i] = (1 / 7.5) * (0.75 + 0.5 * rnd());
+    phaseA[i] = rnd() * TAU;
+    phaseB[i] = rnd() * TAU;
+    rarity[i] = rnd() ** 2.1;
+    dither[i] = rnd();
+  };
+  for (let i = 0; i < MAX_RAYS; i += 1) seedRay(i, true);
+
+  // --- copy mask ----------------------------------------------------------
+  let mask = new Float32Array(1);
+  let maskGradX = new Float32Array(1);
+  let maskGradY = new Float32Array(1);
+  let maskW = 1;
+  let maskH = 1;
+  let ready = false;
+
+  const sample = (grid, x, y) => {
+    const gx = clamp(x / HERO_MASK_CELL, 0, maskW - 1.001);
+    const gy = clamp(y / HERO_MASK_CELL, 0, maskH - 1.001);
+    const ix = gx | 0;
+    const iy = gy | 0;
+    const fx = gx - ix;
+    const fy = gy - iy;
+    const a = grid[iy * maskW + ix];
+    const b = grid[iy * maskW + ix + 1];
+    const c = grid[(iy + 1) * maskW + ix];
+    const d = grid[(iy + 1) * maskW + ix + 1];
+    return lerp(lerp(a, b, fx), lerp(c, d, fx), fy);
+  };
+  const maskAt = (x, y) => sample(mask, x, y);
+
+  const bakeMask = (width, height) => {
+    const rects = heroCopyRects(hero);
+    // A fixed 84px feather is a fifth of a phone's width and would swallow the
+    // little clear space it has, so it scales with the viewport.
+    const feather = clamp(width * 0.055, 34, HERO_MASK_FEATHER);
+    maskW = Math.ceil(width / HERO_MASK_CELL) + 1;
+    maskH = Math.ceil(height / HERO_MASK_CELL) + 1;
+    const size = maskW * maskH;
+    if (mask.length !== size) {
+      mask = new Float32Array(size);
+      maskGradX = new Float32Array(size);
+      maskGradY = new Float32Array(size);
+    }
+    for (let gy = 0; gy < maskH; gy += 1) {
+      for (let gx = 0; gx < maskW; gx += 1) {
+        mask[gy * maskW + gx] = heroMaskValue(
+          gx * HERO_MASK_CELL,
+          gy * HERO_MASK_CELL,
+          rects,
+          feather,
+        );
+      }
+    }
+    // Central differences, edge replicated. Drives the bow around the glyphs.
+    for (let gy = 0; gy < maskH; gy += 1) {
+      for (let gx = 0; gx < maskW; gx += 1) {
+        const k = gy * maskW + gx;
+        const xa = mask[gy * maskW + Math.max(gx - 1, 0)];
+        const xb = mask[gy * maskW + Math.min(gx + 1, maskW - 1)];
+        const ya = mask[Math.max(gy - 1, 0) * maskW + gx];
+        const yb = mask[Math.min(gy + 1, maskH - 1) * maskW + gx];
+        maskGradX[k] = (xb - xa) / (2 * HERO_MASK_CELL);
+        maskGradY[k] = (yb - ya) / (2 * HERO_MASK_CELL);
+      }
+    }
+  };
+
+  // --- geometry -----------------------------------------------------------
+  const geo = {
+    rays: 0,
+    tail: 5,
+    deflect: 0,
+    xL: 0,
+    yA: 0,
+    aperture: 0,
+    sensor: 0,
+    enter: 0,
+    exit: 0,
+    theta0: 0,
+    wander: 0,
+    lift: 0,
+  };
+
+  const rebuildGeometry = (width, height) => {
+    const wide = width >= 900;
+    const tablet = width >= 620;
+
+    if (width >= 1200) {
+      geo.rays = 1100;
+      geo.tail = 9;
+      geo.deflect = 2600;
+    } else if (wide) {
+      geo.rays = 800;
+      geo.tail = 8;
+      geo.deflect = 2600;
+    } else if (tablet) {
+      geo.rays = 480;
+      geo.tail = 6;
+      geo.deflect = 2200;
+    } else {
+      geo.rays = 280;
+      geo.tail = 4;
+      geo.deflect = 0;
+    }
+    geo.rays = Math.round(geo.rays * Math.min(1, height / 760));
+    if ((navigator.hardwareConcurrency || 8) <= 4) geo.rays = Math.round(geo.rays * 0.65);
+    geo.rays = Math.max(80, Math.min(geo.rays, MAX_RAYS));
+
+    geo.xL = width * (wide ? 0.52 : tablet ? 0.46 : 0.42);
+    // The fan has to reach the top of the hero. A fixed pixel cap here leaves
+    // tall viewports with an empty upper third, which is the footer-ribbon
+    // failure the old hero had.
+    geo.aperture = height * (wide ? 0.68 : tablet ? 0.56 : 0.42);
+    geo.sensor = width * (wide ? 0.3 : tablet ? 0.34 : 0.42);
+    geo.enter = -(geo.xL + width * 0.12);
+    geo.exit = width * 1.15 - geo.xL;
+    geo.theta0 = wide ? -0.085 : -0.03;
+    // Upstream turbulence. This is the "many scattered inputs" beat, so the
+    // rays have to visibly cross and tangle, not merely undulate.
+    geo.wander = height * 0.13 * (tablet ? 1 : 0.7);
+    geo.lift = height * 0.055;
+
+    // Walk the axis down until the bright end of the piece is clear of copy.
+    // This is what guarantees the caustic can never land on the headline at
+    // any viewport, breakpoint or headline wrap.
+    geo.yA = height * (wide ? 0.72 : tablet ? 0.78 : 0.855);
+    for (let step = 0; step < 8; step += 1) {
+      const frame = {
+        xL: geo.xL,
+        yA: geo.yA,
+        cos: Math.cos(geo.theta0),
+        sin: Math.sin(geo.theta0),
+      };
+      const focus = heroAxisPoint(geo.sensor, 0, frame);
+      if (maskAt(focus.x, focus.y) < 0.08) break;
+      geo.yA = Math.min(geo.yA + height * 0.02, height * 0.88);
+    }
+  };
+
+  // --- pointer ------------------------------------------------------------
+  const drive = { x: 0, y: 0, active: 0 };
+  const wanted = { x: 0, y: 0, active: 0 };
+  let pointerX = -9999;
+  let pointerY = -9999;
+  let pointerMask = 0;
+  let heroBox = null;
+  let boxDirty = true;
+  let touchRelease = 0;
+
+  const readPointer = (clientX, clientY) => {
+    if (boxDirty || !heroBox) {
+      heroBox = hero.getBoundingClientRect();
+      boxDirty = false;
+    }
+    const x = clientX - heroBox.left;
+    const y = clientY - heroBox.top;
+    if (x < -40 || y < -40 || x > heroBox.width + 40 || y > heroBox.height + 40) {
+      wanted.active = 0;
+      return;
+    }
+    pointerX = x;
+    pointerY = y;
+    wanted.x = clamp((x / heroBox.width - 0.5) * 2, -1, 1);
+    wanted.y = clamp((y / heroBox.height - 0.5) * 2, -1, 1);
+    wanted.active = 1;
+  };
+
+  if (!still) {
+    // One listener on document: .site-header sits over the top of the hero and
+    // would otherwise swallow the event there. Passive, and never on the CTAs.
+    document.addEventListener(
+      "pointermove",
+      (event) => readPointer(event.clientX, event.clientY),
+      { passive: true },
+    );
+    hero.addEventListener(
+      "touchmove",
+      (event) => {
+        const touch = event.touches[0];
+        if (!touch) return;
+        window.clearTimeout(touchRelease);
+        readPointer(touch.clientX, touch.clientY);
+      },
+      { passive: true },
+    );
+    hero.addEventListener("touchend", () => {
+      window.clearTimeout(touchRelease);
+      touchRelease = window.setTimeout(() => {
+        wanted.active = 0;
+      }, 1500);
+    }, { passive: true });
+    window.addEventListener("scroll", () => {
+      boxDirty = true;
+    }, { passive: true });
+    window.addEventListener("blur", () => {
+      wanted.active = 0;
     });
   }
 
-  const palette = [
-    [75, 38, 62],
-    [99, 39, 75],
-    [123, 41, 87],
-    [151, 43, 101],
-    [201, 37, 123],
-    [181, 65, 126],
-    [157, 84, 132],
-    [128, 92, 128],
-    [91, 70, 99],
-  ];
-
-  createStage(canvas, (ctx, stage, delta) => {
-    const { width, height, time } = stage;
-    const geometry = { width, height };
-    const ease = 1 - Math.exp(-delta * 4.5);
-    pointer.x = lerp(pointer.x, target.x, ease);
-    pointer.y = lerp(pointer.y, target.y, ease);
-    pointer.active = lerp(pointer.active, target.active, ease);
-    const at = (t, index) => heroLinePoint(t, index, geometry, time, pointer);
-
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    // A quiet responsive wash gives the entire field depth without creating a
-    // bright cursor spotlight or reducing contrast behind the copy.
-    const washX = width * (0.8 + pointer.x * 0.045 * pointer.active);
-    const washY = height * (0.48 + pointer.y * 0.06 * pointer.active);
-    const washRadius = Math.max(width, height) * 0.48;
-    const wash = ctx.createRadialGradient(washX, washY, 0, washX, washY, washRadius);
-    wash.addColorStop(0, `rgba(228, 206, 221, ${(0.22 + pointer.active * 0.04).toFixed(3)})`);
-    wash.addColorStop(0.55, "rgba(228, 206, 221, 0.06)");
-    wash.addColorStop(1, "rgba(228, 206, 221, 0)");
-    ctx.fillStyle = wash;
-    ctx.fillRect(0, 0, width, height);
-
-    // Fine shadow contours replace the old solid block on the right. Their
-    // shared movement creates volume while every individual path stays visible.
-    for (let layer = 0; layer < 18; layer += 1) {
-      const index = (layer / 17) * (HERO_STRAND_COUNT - 1);
-      ctx.beginPath();
-      for (let segment = 0; segment <= 44; segment += 1) {
-        const t = 0.62 + (segment / 44) * 0.38;
-        const point = at(t, index);
-        if (segment) ctx.lineTo(point.x, point.y);
-        else ctx.moveTo(point.x, point.y);
-      }
-      ctx.strokeStyle = `rgba(20, 14, 20, ${(0.035 + layer * 0.003).toFixed(3)})`;
-      ctx.lineWidth = 5 + layer * 0.7;
-      ctx.stroke();
+  // --- draw buckets -------------------------------------------------------
+  const strokes = Array.from({ length: 40 }, () => []);
+  // Squares share the stroke quantisation so they obey the same ink ceiling.
+  const squares = Array.from({ length: 10 }, () => []);
+  const STROKE_STYLE = [];
+  for (let cls = 0; cls < 4; cls += 1) {
+    for (let level = 0; level < 10; level += 1) {
+      STROKE_STYLE.push(`rgba(${HERO_RGB[cls]},${HERO_ALPHA_LEVELS[level].toFixed(4)})`);
     }
+  }
 
-    for (let index = 0; index < HERO_STRAND_COUNT; index += 1) {
-      const [red, green, blue] = palette[index];
-      const lineWeight = index === 4 ? 2.5 : 1 + ((index * 17) % 4) * 0.26;
+  /** Quantise an alpha to a band that is guaranteed to sit under the ceiling. */
+  const bandFor = (alpha, mask, jitter) => {
+    const ceiling = HERO_CEIL_COPY + (HERO_CEIL_CLEAR - HERO_CEIL_COPY) * (1 - mask);
+    let level = clamp(
+      Math.round(Math.sqrt(alpha / HERO_CEIL_CLEAR) * 9 + jitter - 0.5),
+      0,
+      9,
+    );
+    while (level > 0 && HERO_ALPHA_LEVELS[level] > ceiling) level -= 1;
+    return level;
+  };
 
-      ctx.beginPath();
-      for (let segment = 0; segment <= HERO_SEGMENTS; segment += 1) {
-        const point = at(segment / HERO_SEGMENTS, index);
-        if (segment) ctx.lineTo(point.x, point.y);
-        else ctx.moveTo(point.x, point.y);
+  let intro = 0;
+  let fontsSettled = false;
+  let flux = 0;
+  let lastW = 0;
+  let lastH = 0;
+  let rebuildTimer = 0;
+  let stageRef = null;
+  let slowFrames = 0;
+  let averageDelta = 1 / 60;
+  let latched = false;
+
+  const scheduleRebuild = () => {
+    window.clearTimeout(rebuildTimer);
+    rebuildTimer = window.setTimeout(() => {
+      const width = stageRef?.stage.width || canvas.clientWidth || 1;
+      const height = stageRef?.stage.height || canvas.clientHeight || 1;
+      bakeMask(width, height);
+      rebuildGeometry(width, height);
+      ready = true;
+      boxDirty = true;
+      stageRef?.paint();
+    }, 120);
+  };
+
+  // Scratch points, reused every sample so the loop allocates nothing.
+  const pointA = { x: 0, y: 0, p: 0, u: 0, c: 0, m: 0 };
+  const pointB = { x: 0, y: 0, p: 0, u: 0, c: 0, m: 0 };
+
+  stageRef = createStage(
+    canvas,
+    (ctx, stage, delta) => {
+      const width = stage.width;
+      const height = stage.height;
+      if (width !== lastW || height !== lastH) {
+        lastW = width;
+        lastH = height;
+        scheduleRebuild();
       }
-      const ink = ctx.createLinearGradient(0, height, width, 0);
-      ink.addColorStop(0, `rgba(${red}, ${green}, ${blue}, 0.54)`);
-      ink.addColorStop(0.5, `rgba(${red}, ${green}, ${blue}, 0.76)`);
-      ink.addColorStop(0.68, `rgba(${red}, ${green}, ${blue}, 0.94)`);
-      ink.addColorStop(1, `rgba(${red}, ${green}, ${blue}, ${index === 4 ? 0.94 : 0.28})`);
-      ctx.strokeStyle = ink;
-      ctx.lineWidth = lineWeight;
-      ctx.stroke();
+      if (!ready) return;
 
-      // Two long tapered waves travel through every strand. Short graduated
-      // segments make the pulse dissolve at both ends instead of reading as a
-      // rectangular bar of light.
-      for (let pulseIndex = 0; pulseIndex < 2; pulseIndex += 1) {
-        const head = ((time * (0.085 + index * 0.0018) + index * 0.105 + pulseIndex * 0.53) % 1.18) - 0.04;
-        const pulseLength = 0.18;
-        const tail = head - pulseLength;
+      const dt = Math.min(delta, 1 / 30);
+      const moving = stage.motion;
+      const time = moving ? stage.time : 6;
 
-        ctx.save();
-        ctx.lineCap = "butt";
-        for (let part = 0; part < 26; part += 1) {
-          const fromT = lerp(tail, head, part / 26);
-          const toT = lerp(tail, head, (part + 1) / 26);
-          if (toT <= 0 || fromT >= 1) continue;
+      if (moving) {
+        // Held at zero until the mask has been baked against the real font.
+        // getBoundingClientRect before Playfair swaps in returns fallback
+        // metrics, and art must never sit over live type in that window.
+        if (fontsSettled) intro += (1 - intro) * (1 - Math.exp(-delta * 2.6));
+        const grab = 1 - Math.exp(-delta * 2.2);
+        drive.active += (wanted.active - drive.active) * grab;
+        // Cubed so the piece rests near focus and only briefly softens: the
+        // passive visitor's default view is the resolved one.
+        const autoX = 0.62 * Math.sin((TAU * time) / 15) ** 3;
+        const autoY = 0.3 * Math.sin((TAU * time) / 23.5);
+        const ease = 1 - Math.exp(-delta * 5);
+        drive.x += (lerp(autoX, wanted.x, drive.active) - drive.x) * ease;
+        drive.y += (lerp(autoY, wanted.y, drive.active) - drive.y) * ease;
+      } else {
+        intro = 1;
+        drive.x = 0;
+        drive.y = 0;
+        drive.active = 0;
+      }
 
-          const position = (part + 0.5) / 26;
-          const strength = pulseEnvelope(position);
-          const from = at(clamp(fromT, 0, 1), index);
-          const to = at(clamp(toT, 0, 1), index);
-          const colourShift = smooth(position);
-          const pulseRed = Math.round(lerp(201, 243, colourShift));
-          const pulseGreen = Math.round(lerp(37, 185, colourShift));
-          const pulseBlue = Math.round(lerp(123, 216, colourShift));
+      const sharp = moving ? heroSharp(drive.x) : 0.94;
+      const focal = heroFocalLength(drive.x, geo.sensor);
+      const theta = geo.theta0 + drive.y * 0.085;
+      const cos = Math.cos(theta);
+      const sin = Math.sin(theta);
+      const normalX = -sin;
+      const normalY = cos;
+      const apertureNow = geo.aperture * (1 - 0.12 * Math.abs(drive.y));
+      const hoverRadius = 0.26 * Math.min(width, height);
+      pointerMask = drive.active > 0.01 ? maskAt(pointerX, pointerY) : 0;
 
-          ctx.beginPath();
-          ctx.moveTo(from.x, from.y);
-          ctx.lineTo(to.x, to.y);
-          ctx.strokeStyle = `rgba(${pulseRed}, ${pulseGreen}, ${pulseBlue}, ${(strength * 0.9).toFixed(3)})`;
-          ctx.lineWidth = lineWeight + strength * 2.4;
-          ctx.shadowColor = `rgba(201, 37, 123, ${(strength * 0.28).toFixed(3)})`;
-          ctx.shadowBlur = strength * 8;
-          ctx.stroke();
+      for (let i = 0; i < strokes.length; i += 1) strokes[i].length = 0;
+      for (let i = 0; i < squares.length; i += 1) squares[i].length = 0;
+      let focalHits = 0;
+
+      // Per-ray scratch, captured by evaluate().
+      let rayIndex = 0;
+      let rayHeight = 0;
+      let rayFocal = 0;
+      let rayExit = 0;
+      let rayWander0 = 0;
+
+      const wanderAt = (p) =>
+        geo.wander *
+        (Math.sin(p * 0.006 + phaseA[rayIndex] + time * 0.33) +
+          0.58 * Math.sin(p * 0.0147 - phaseB[rayIndex] + time * 0.51) +
+          0.34 * Math.sin(p * 0.0286 + phaseA[rayIndex] * 1.7 - time * 0.21));
+
+      const evaluate = (out, s) => {
+        const p = geo.enter + (geo.exit - geo.enter) * s;
+        const gate = heroTurbulence(p, geo.sensor);
+        let q;
+        let collimation = 0;
+        if (p <= 0) {
+          q = rayHeight + (gate > 0.02 ? gate * (wanderAt(p) - rayWander0) : 0);
+        } else {
+          const diverging = rayHeight * (1 - p / rayFocal);
+          collimation = sharp * ramp(rayFocal, rayFocal + 0.45 * (geo.exit - rayFocal), p);
+          q = diverging + (rayExit - diverging) * collimation - geo.lift * collimation;
+          if (gate > 0.02) q += gate * (wanderAt(p) - rayWander0) * 0.1 * (1 - collimation);
         }
-        ctx.restore();
-      }
-    }
+        let x = geo.xL + p * cos - q * sin;
+        let y = geo.yA + p * sin + q * cos;
+        if (geo.deflect) {
+          // The copy is a body in the beam: rays bow around the glyph runs.
+          const gradient =
+            sample(maskGradX, x, y) * normalX + sample(maskGradY, x, y) * normalY;
+          x -= gradient * geo.deflect * normalX;
+          y -= gradient * geo.deflect * normalY;
+        }
+        out.x = x;
+        out.y = y;
+        out.p = p;
+        out.u = p > 0 ? p / rayFocal : 0;
+        out.c = collimation;
+        out.m = maskAt(x, y);
+        if (out.u > 0.9 && out.u < 1.1) focalHits += 1;
+        return out;
+      };
 
-    const focus = at(0.62, 4);
-    const haloRadius = 18 + Math.sin(time * 1.15) * 2.5;
-    const halo = ctx.createRadialGradient(focus.x, focus.y, 0, focus.x, focus.y, haloRadius);
-    halo.addColorStop(0, "rgba(243, 185, 216, 0.56)");
-    halo.addColorStop(0.35, "rgba(201, 37, 123, 0.2)");
-    halo.addColorStop(1, "rgba(201, 37, 123, 0)");
-    ctx.beginPath();
-    ctx.arc(focus.x, focus.y, haloRadius, 0, Math.PI * 2);
-    ctx.fillStyle = halo;
-    ctx.fill();
-  });
+      const emit = (from, to, taper, hover) => {
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        if (dx * dx + dy * dy > 90000) return;
+        const m = to.m;
+        const u = to.u;
+        let base;
+        if (to.p <= 0) {
+          // Rises as the scattered field approaches the lens.
+          base = 0.05 + 0.05 * (1 - to.p / geo.enter);
+        } else {
+          base =
+            0.075 +
+            0.04 * Math.min(u, 1.6) +
+            0.12 * Math.exp(-(((u - 1) / 0.26) ** 2)) * (0.35 + 0.65 * sharp);
+        }
+        const raw =
+          base * taper * (0.72 + 1.9 * rarity[rayIndex]) * (1 + 0.55 * hover) * intro;
+        const alpha = heroInkAlpha(raw, m);
+        // Nothing dark, saturated or wide is ever drawn over type.
+        let cls = to.p <= 0 ? 0 : rarity[rayIndex] > 0.88 ? 3 : u > 0.78 ? 2 : 1;
+        if (m > 0.45) cls = 0;
+        const level = bandFor(alpha, m, dither[rayIndex]);
+        if (!level) return;
+        strokes[cls * 10 + level].push(from.x, from.y, to.x, to.y);
+      };
+
+      for (let i = 0; i < geo.rays; i += 1) {
+        if (moving) {
+          along[i] += speed[i] * dt;
+          if (along[i] >= 1) seedRay(i, false);
+        }
+        rayIndex = i;
+        rayHeight = apertureNow * aperture[i];
+        const norm = aperture[i];
+        // Longitudinal spherical aberration: marginal rays cross nearer than
+        // paraxial ones, and the envelope of that family IS the caustic cusp.
+        rayFocal = Math.max(focal * (1 - 0.2 * norm * norm), focal * 0.55);
+        // Math.sign(0) is 0, which is correct: the axial ray is the axis.
+        rayExit = -Math.sign(rayHeight) * (apertureNow * 0.05 + Math.abs(rayHeight) * 0.085);
+        rayWander0 = wanderAt(0);
+
+        const head = evaluate(pointA, along[i]);
+
+        let hover = 0;
+        if (drive.active > 0.01) {
+          const dx = head.x - pointerX;
+          const dy = head.y - pointerY;
+          hover =
+            drive.active *
+            Math.exp(-(dx * dx + dy * dy) / (hoverRadius * hoverRadius)) *
+            (1 - 0.8 * pointerMask);
+        }
+
+        // Raw data points in the stream, which cease to exist once focused.
+        if (i % 10 === 0 && head.p <= 0) {
+          const alpha = heroInkAlpha(0.14 * (0.72 + 1.9 * rarity[i]) * intro, head.m);
+          const level = bandFor(alpha, head.m, dither[i]);
+          if (level) squares[level].push(head.x, head.y);
+          continue;
+        }
+
+        const step =
+          (speed[i] * STREAK_SECONDS * (1 + 1.5 * hover) * (1 - 0.35 * head.c)) /
+          (geo.tail - 1);
+        // Two scratch points, swapped each step, so the loop never allocates.
+        let previous = pointA;
+        let scratch = pointB;
+        for (let j = 1; j < geo.tail; j += 1) {
+          const next = evaluate(scratch, Math.max(along[i] - step * j, 0));
+          emit(previous, next, 1 - (j - 1) / (geo.tail - 1), hover);
+          scratch = previous;
+          previous = next;
+        }
+      }
+
+      // --- emit: at most 40 strokes and 3 fills for the whole field --------
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (let b = 0; b < strokes.length; b += 1) {
+        const bucket = strokes[b];
+        if (!bucket.length) continue;
+        ctx.beginPath();
+        for (let n = 0; n < bucket.length; n += 4) {
+          ctx.moveTo(bucket[n], bucket[n + 1]);
+          ctx.lineTo(bucket[n + 2], bucket[n + 3]);
+        }
+        ctx.strokeStyle = STROKE_STYLE[b];
+        ctx.lineWidth = HERO_WIDTH[(b / 10) | 0];
+        ctx.stroke();
+      }
+      for (let b = 1; b < squares.length; b += 1) {
+        const bucket = squares[b];
+        if (!bucket.length) continue;
+        ctx.fillStyle = STROKE_STYLE[b];
+        for (let n = 0; n < bucket.length; n += 2) {
+          ctx.fillRect(bucket[n] - 1, bucket[n + 1] - 1, 2, 2);
+        }
+      }
+
+      // --- the caustic ------------------------------------------------------
+      // 0.047 is the fraction of each ray's path that lies inside the focal
+      // band, so this is the sample count expected at steady state.
+      const expected = Math.max(1, geo.rays * geo.tail * 0.047);
+      const arrival = clamp((focalHits / expected - 0.8) / 0.45, 0, 1);
+      flux += (arrival - flux) * (1 - Math.exp(-dt / 0.35));
+
+      const frame = { xL: geo.xL, yA: geo.yA, cos, sin };
+      const focus = heroAxisPoint(focal, 0, frame);
+      const behind = heroAxisPoint(focal * 0.78, 0, frame);
+
+      const spine = ctx.createLinearGradient(behind.x, behind.y, focus.x, focus.y);
+      spine.addColorStop(0, "rgba(201,37,123,0)");
+      spine.addColorStop(1, `rgba(201,37,123,${((0.06 + 0.3 * sharp) * intro).toFixed(3)})`);
+      ctx.beginPath();
+      ctx.moveTo(behind.x, behind.y);
+      ctx.lineTo(focus.x, focus.y);
+      ctx.strokeStyle = spine;
+      ctx.lineWidth = 1.2 + 2.6 * sharp;
+      ctx.stroke();
+
+      const radius = (8 + 34 * (1 - sharp)) * (1 + 0.1 * flux);
+      const bloom = (cx, cy, scale, hot, mid) => {
+        const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(radius, 1));
+        gradient.addColorStop(
+          0,
+          `rgba(${hot},${((0.42 + 0.3 * sharp * flux) * intro * scale).toFixed(3)})`,
+        );
+        gradient.addColorStop(
+          0.28,
+          `rgba(${mid},${(0.26 * (0.4 + 0.6 * sharp) * intro * scale).toFixed(3)})`,
+        );
+        gradient.addColorStop(0.62, `rgba(201,37,123,${(0.1 * intro * scale).toFixed(3)})`);
+        gradient.addColorStop(1, "rgba(201,37,123,0)");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+      };
+
+      // Defocused light disperses into a colour fringe — kept in palette.
+      if (sharp < 0.62) {
+        const offset = (1 - sharp) * 8;
+        bloom(focus.x - offset * cos, focus.y - offset * sin, 0.35, "75,38,62", "75,38,62");
+        bloom(focus.x + offset * cos, focus.y + offset * sin, 0.35, "228,206,221", "228,206,221");
+      }
+      bloom(focus.x, focus.y, 1, "255,253,255", "243,185,216");
+
+      ctx.beginPath();
+      ctx.arc(focus.x, focus.y, 1.1 + 2.4 * sharp, 0, TAU);
+      ctx.fillStyle = `rgba(255,252,254,${((0.55 + 0.42 * sharp * flux) * intro).toFixed(3)})`;
+      ctx.fill();
+
+      // --- one-shot quality latch ------------------------------------------
+      if (moving && !latched) {
+        averageDelta += (delta - averageDelta) * 0.05;
+        slowFrames = averageDelta > 0.021 ? slowFrames + 1 : 0;
+        if (slowFrames > 45) {
+          geo.rays = Math.round(geo.rays * 0.7);
+          geo.tail = Math.max(3, geo.tail - 1);
+          latched = true;
+        }
+      }
+    },
+    { maxRatio: canvas.clientWidth >= 620 ? 1.5 : 1.25 },
+  );
+
+  if (!stageRef) return;
+
+  // The mask is measured from the DOM, so it must be rebuilt whenever the copy
+  // could have moved — including when Playfair Display finally swaps in.
+  scheduleRebuild();
+  if ("ResizeObserver" in window) {
+    const inner = hero.querySelector(".hero__inner");
+    if (inner) new ResizeObserver(scheduleRebuild).observe(inner);
+  }
+  const settleFonts = () => {
+    if (fontsSettled) return;
+    fontsSettled = true;
+    scheduleRebuild();
+  };
+  document.fonts?.ready?.then(settleFonts);
+  // Always keep the fallback: if document.fonts is missing or never resolves,
+  // the hero would otherwise stay invisible forever.
+  window.setTimeout(settleFonts, 1200);
 }
 
 function setupNavigation() {
