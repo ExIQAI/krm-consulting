@@ -115,33 +115,21 @@ test('hero ink over the copy is bounded no matter what is asked for', async () =
   );
 });
 
-test('the hero optics respond to the pointer the way the brief asks', async () => {
-  const { heroSharp, heroFocalLength, heroTurbulence, heroAxisPoint } =
-    await import('../script.js');
+test('the hero gravity attracts nearby stars and leaves distant stars alone', async () => {
+  const { heroGravity } = await import('../script.js');
 
-  // Focus is found at the centre and lost towards either edge, so sweeping
-  // the mouse across is a live A/B between blurred and sharp.
-  assert.equal(heroSharp(0), 1);
-  assert.equal(heroSharp(-1), 0);
-  assert.equal(heroSharp(1), 0);
-  assert.ok(heroSharp(0.35) > heroSharp(0.75));
+  assert.deepEqual(heroGravity(0, 0), { x: 0, y: 0, weight: 0 });
+  assert.deepEqual(heroGravity(250, 0), { x: 0, y: 0, weight: 0 });
 
-  // Horizontal position really moves the focal plane.
-  const sensor = 432;
-  assert.equal(heroFocalLength(0, sensor), sensor);
-  assert.ok(heroFocalLength(-1, sensor) < sensor);
-  assert.ok(heroFocalLength(1, sensor) > sensor);
+  const near = heroGravity(30, 40);
+  const far = heroGravity(90, 120);
+  assert.ok(near.x > 0 && near.y > 0);
+  assert.ok(near.weight > far.weight);
+  assert.ok(Math.hypot(near.x, near.y) > Math.hypot(far.x, far.y));
 
-  // Turbulence is the many-inputs beat: full upstream, gone by the focus.
-  assert.ok(heroTurbulence(-4000, sensor) > 0.99);
-  assert.ok(heroTurbulence(sensor, sensor) < 0.07);
-  assert.ok(heroTurbulence(-4000, sensor) > heroTurbulence(sensor, sensor));
-
-  // The axis frame is a pure rotation about the lens point.
-  const frame = { xL: 700, yA: 600, cos: 1, sin: 0 };
-  assert.deepEqual(heroAxisPoint(0, 0, frame), { x: 700, y: 600 });
-  assert.deepEqual(heroAxisPoint(100, 0, frame), { x: 800, y: 600 });
-  assert.deepEqual(heroAxisPoint(0, 50, frame), { x: 700, y: 650 });
+  const left = heroGravity(-30, 0);
+  assert.ok(left.x < 0);
+  assert.equal(left.y, 0);
 });
 
 test('the hero avoids the canvas operations that made the old one costly', () => {

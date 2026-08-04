@@ -383,13 +383,8 @@ button {
   z-index: 1;
   inset: 0;
   background:
-    /* A light blanket veil. The artwork caps its own ink at 0.03 alpha wherever
-       the copy measurably is, so this no longer has to carry the protection by
-       itself — and at 0.5 it was washing out the entire right-hand side, where
-       there is no copy at all. */
-    linear-gradient(180deg, rgba(255, 250, 246, 0.2) 0 62%, rgba(255, 250, 246, 0.08) 78%, transparent 88%),
-    /* The real protection, aimed at the column the copy actually occupies. */
-    linear-gradient(90deg, rgba(255, 250, 246, 0.42) 0 34%, rgba(255, 250, 246, 0.18) 52%, transparent 68%);
+    radial-gradient(ellipse at 28% 45%, rgba(255, 250, 246, 0.76) 0 24%, rgba(255, 250, 246, 0.3) 50%, transparent 70%),
+    linear-gradient(90deg, rgba(255, 250, 246, 0.5) 0 34%, rgba(255, 250, 246, 0.14) 56%, transparent 72%);
   content: "";
   pointer-events: none;
 }
